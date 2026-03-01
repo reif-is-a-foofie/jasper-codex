@@ -421,6 +421,10 @@ pub struct Config {
     /// Plan preset. The `none` value means "no reasoning" (not "inherit the
     /// global default").
     pub plan_mode_reasoning_effort: Option<ReasoningEffort>,
+    /// Optional Plan-mode-specific developer instructions override.
+    ///
+    /// When unset, Plan mode uses the built-in Plan preset instructions.
+    pub plan_mode_developer_instructions: Option<String>,
 
     /// Optional value to use for `reasoning.summary` when making a request
     /// using the Responses API. When unset, the model catalog default is used.
@@ -1178,6 +1182,7 @@ pub struct ConfigToml {
 
     pub model_reasoning_effort: Option<ReasoningEffort>,
     pub plan_mode_reasoning_effort: Option<ReasoningEffort>,
+    pub plan_mode_developer_instructions: Option<String>,
     pub model_reasoning_summary: Option<ReasoningSummary>,
     /// Optional verbosity control for GPT-5 models (Responses API `text.verbosity`).
     pub model_verbosity: Option<Verbosity>,
@@ -2217,6 +2222,9 @@ impl Config {
             plan_mode_reasoning_effort: config_profile
                 .plan_mode_reasoning_effort
                 .or(cfg.plan_mode_reasoning_effort),
+            plan_mode_developer_instructions: config_profile
+                .plan_mode_developer_instructions
+                .or(cfg.plan_mode_developer_instructions),
             model_reasoning_summary: config_profile
                 .model_reasoning_summary
                 .or(cfg.model_reasoning_summary),
@@ -5231,6 +5239,8 @@ model_verbosity = "high"
                 model_reasoning_effort: Some(ReasoningEffort::High),
                 plan_mode_reasoning_effort: None,
                 model_reasoning_summary: Some(ReasoningSummary::Detailed),
+                plan_mode_developer_instructions: None,
+                model_reasoning_summary: Some(ReasoningSummary::Detailed),
                 model_supports_reasoning_summaries: None,
                 model_catalog: None,
                 model_verbosity: None,
@@ -5361,6 +5371,8 @@ model_verbosity = "high"
             model_reasoning_effort: None,
             plan_mode_reasoning_effort: None,
             model_reasoning_summary: None,
+            plan_mode_developer_instructions: None,
+            model_reasoning_summary: None,
             model_supports_reasoning_summaries: None,
             model_catalog: None,
             model_verbosity: None,
@@ -5489,6 +5501,8 @@ model_verbosity = "high"
             model_reasoning_effort: None,
             plan_mode_reasoning_effort: None,
             model_reasoning_summary: None,
+            plan_mode_developer_instructions: None,
+            model_reasoning_summary: None,
             model_supports_reasoning_summaries: None,
             model_catalog: None,
             model_verbosity: None,
@@ -5602,6 +5616,8 @@ model_verbosity = "high"
             show_raw_agent_reasoning: false,
             model_reasoning_effort: Some(ReasoningEffort::High),
             plan_mode_reasoning_effort: None,
+            model_reasoning_summary: Some(ReasoningSummary::Detailed),
+            plan_mode_developer_instructions: None,
             model_reasoning_summary: Some(ReasoningSummary::Detailed),
             model_supports_reasoning_summaries: None,
             model_catalog: None,
