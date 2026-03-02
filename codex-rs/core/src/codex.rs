@@ -253,6 +253,7 @@ use crate::rollout::RolloutRecorderParams;
 use crate::rollout::map_session_init_error;
 use crate::rollout::metadata;
 use crate::rollout::policy::EventPersistenceMode;
+use crate::rollout::store::InMemoryRolloutSource;
 use crate::shell;
 use crate::shell_snapshot::ShellSnapshot;
 use crate::skills::SkillError;
@@ -1851,7 +1852,10 @@ impl Session {
                 let token_info = Self::last_token_info_from_rollout(&rollout_items);
 
                 let reconstructed_rollout = self
-                    .reconstruct_history_from_rollout(&turn_context, rollout_items)
+                    .reconstruct_history_from_rollout(
+                        &turn_context,
+                        InMemoryRolloutSource::new(rollout_items),
+                    )
                     .await;
                 let previous_turn_settings = reconstructed_rollout.previous_turn_settings.clone();
                 self.set_previous_turn_settings(previous_turn_settings.clone())
@@ -1916,7 +1920,10 @@ impl Session {
                 }
 
                 let reconstructed_rollout = self
-                    .reconstruct_history_from_rollout(&turn_context, rollout_items)
+                    .reconstruct_history_from_rollout(
+                        &turn_context,
+                        InMemoryRolloutSource::new(rollout_items),
+                    )
                     .await;
                 self.set_previous_turn_settings(
                     reconstructed_rollout.previous_turn_settings.clone(),
@@ -6673,9 +6680,9 @@ mod tests {
     use crate::protocol::TokenUsageInfo;
     use crate::protocol::TurnCompleteEvent;
     use crate::protocol::UserMessageEvent;
+    use crate::rollout::RolloutRecorder;
+    use crate::rollout::RolloutRecorderParams;
     use crate::rollout::policy::EventPersistenceMode;
-    use crate::rollout::recorder::RolloutRecorder;
-    use crate::rollout::recorder::RolloutRecorderParams;
     use crate::state::TaskKind;
     use crate::tasks::SessionTask;
     use crate::tasks::SessionTaskContext;
@@ -7338,7 +7345,10 @@ mod tests {
 
         let reconstruction_turn = session.new_default_turn().await;
         let reconstructed = session
-            .reconstruct_history_from_rollout(reconstruction_turn.as_ref(), rollout_items)
+            .reconstruct_history_from_rollout(
+                reconstruction_turn.as_ref(),
+                InMemoryRolloutSource::new(rollout_items),
+            )
             .await;
 
         assert_eq!(expected, reconstructed.history);
@@ -7374,7 +7384,10 @@ mod tests {
         })];
 
         let reconstructed = session
-            .reconstruct_history_from_rollout(&turn_context, rollout_items)
+            .reconstruct_history_from_rollout(
+                &turn_context,
+                InMemoryRolloutSource::new(rollout_items),
+            )
             .await;
 
         assert_eq!(reconstructed.history, replacement_history);
