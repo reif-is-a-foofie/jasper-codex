@@ -404,7 +404,7 @@ Turns attach user input (text or images) to a thread and trigger Codex generatio
 
 You can optionally specify config overrides on the new turn. If specified, these settings become the default for subsequent turns on the same thread. `outputSchema` applies only to the current turn.
 
-`ephemeralContext` is separate from `input`. Use it for extra context that should apply only to the current turn, such as IDE/editor state. "Turn-scoped" means Codex sees it when handling that user message. "Ephemeral" means clients should send a fresh snapshot on later turns instead of expecting the server to carry it forward automatically.
+`ephemeralContext` is separate from `input`. Use it for extra context for the current turn, such as IDE/editor state. This context is not re-injected automatically after compaction, so clients should send a fresh snapshot on each turn instead of expecting it to carry forward automatically.
 
 ```json
 { "method": "turn/start", "id": 30, "params": {

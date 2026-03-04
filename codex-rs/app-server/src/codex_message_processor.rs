@@ -36,6 +36,7 @@ use codex_app_server_protocol::CommandExecParams;
 use codex_app_server_protocol::ConversationGitInfo;
 use codex_app_server_protocol::ConversationSummary;
 use codex_app_server_protocol::DynamicToolSpec as ApiDynamicToolSpec;
+use codex_app_server_protocol::EphemeralContext as V2EphemeralContext;
 use codex_app_server_protocol::ExecOneOffCommandResponse;
 use codex_app_server_protocol::ExperimentalFeature as ApiExperimentalFeature;
 use codex_app_server_protocol::ExperimentalFeatureListParams;
@@ -4253,8 +4254,19 @@ impl CodexMessageProcessor {
         }
     }
 
-    fn validate_v2_input_limit(items: &[V2UserInput]) -> Result<(), JSONRPCErrorError> {
-        let actual_chars: usize = items.iter().map(V2UserInput::text_char_count).sum();
+    fn validate_v2_input_limit(
+        items: &[V2UserInput],
+        ephemeral_context: Option<&[V2EphemeralContext]>,
+    ) -> Result<(), JSONRPCErrorError> {
+        let actual_chars: usize = items
+            .iter()
+            .map(V2UserInput::text_char_count)
+            .sum::<usize>()
+            + ephemeral_context
+                .unwrap_or_default()
+                .iter()
+                .map(|context| context.title.chars().count() + context.text.chars().count())
+                .sum::<usize>();
         if actual_chars > MAX_USER_INPUT_TEXT_CHARS {
             return Err(Self::input_too_large_error(actual_chars));
         }
@@ -4990,7 +5002,9 @@ impl CodexMessageProcessor {
         params: TurnStartParams,
         app_server_client_name: Option<String>,
     ) {
-        if let Err(error) = Self::validate_v2_input_limit(&params.input) {
+        if let Err(error) =
+            Self::validate_v2_input_limit(&params.input, params.ephemeral_context.as_deref())
+        {
             self.outgoing.send_error(request_id, error).await;
             return;
         }
@@ -5119,7 +5133,7 @@ impl CodexMessageProcessor {
             .await;
             return;
         }
-        if let Err(error) = Self::validate_v2_input_limit(&params.input) {
+        if let Err(error) = Self::validate_v2_input_limit(&params.input, None) {
             self.outgoing.send_error(request_id, error).await;
             return;
         }
