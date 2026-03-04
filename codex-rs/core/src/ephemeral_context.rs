@@ -1,7 +1,5 @@
 use crate::contextual_user_message::ADDITIONAL_CONTEXT_FRAGMENT;
 use crate::contextual_user_message::ModelVisibleFragment;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
 use codex_protocol::user_input::EphemeralContext;
 
 impl ModelVisibleFragment for EphemeralContext {
@@ -20,6 +18,8 @@ impl ModelVisibleFragment for EphemeralContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_protocol::models::ContentItem;
+    use codex_protocol::models::ResponseItem;
     use pretty_assertions::assert_eq;
 
     #[test]

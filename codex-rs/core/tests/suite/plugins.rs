@@ -231,6 +231,7 @@ async fn plugin_apps_expose_tools_after_canonical_name_mention() -> Result<()> {
                 text: "hello".into(),
                 text_elements: Vec::new(),
             }],
+            ephemeral_context: Vec::new(),
             final_output_json_schema: None,
         })
         .await?;
@@ -242,6 +243,7 @@ async fn plugin_apps_expose_tools_after_canonical_name_mention() -> Result<()> {
                 text: "Use $google-calendar and then call tools.".into(),
                 text_elements: Vec::new(),
             }],
+            ephemeral_context: Vec::new(),
             final_output_json_schema: None,
         })
         .await?;
