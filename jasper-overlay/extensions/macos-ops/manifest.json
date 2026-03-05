@@ -1,0 +1,10 @@
+{
+  "id": "macos-ops",
+  "name": "macOS Operations",
+  "instructions": [
+    "instructions.md"
+  ],
+  "env": {
+    "JASPER_OS_CONTEXT": "macos"
+  }
+}

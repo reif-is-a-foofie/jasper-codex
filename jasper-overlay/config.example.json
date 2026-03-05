@@ -1,0 +1,10 @@
+{
+  "enabledExtensions": [
+    "macos-ops",
+    "email-triage"
+  ],
+  "extensionPaths": [
+    "~/.jasper/extensions"
+  ],
+  "codexBin": "codex"
+}

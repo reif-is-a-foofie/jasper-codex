@@ -1,3 +1,21 @@
+# Jasper Fork Directives
+
+This repository is a fork of `openai/codex` for building Jasper.
+
+Before starting work, load:
+
+- `agent.md`
+- `docs/jasper/PROJECT_DETAILS.md`
+- `docs/jasper-modularity.md`
+
+Fork-specific directives:
+
+- Keep Jasper-specific behavior in `jasper-overlay/` whenever possible.
+- Preserve upstream mergeability; avoid deep edits to core unless required.
+- Prefer extension/config-driven customization so other users can fork and plug in tools.
+- Maintain macOS-first ergonomics for Jasper workflows.
+- Build one milestone at a time.
+
 # Rust/codex-rs
 
 In the codex-rs folder where the rust code lives:

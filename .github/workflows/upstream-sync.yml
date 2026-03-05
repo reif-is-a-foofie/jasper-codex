@@ -1,0 +1,57 @@
+name: Upstream Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 12 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: git fetch https://github.com/openai/codex.git main
+
+      - name: Create sync branch
+        run: |
+          branch="sync/upstream-$(date +%Y%m%d)"
+          git checkout -b "$branch"
+          git merge --no-edit FETCH_HEAD
+          echo "SYNC_BRANCH=$branch" >> "$GITHUB_ENV"
+
+      - name: Detect changes
+        id: diff
+        run: |
+          if git diff --quiet origin/main...HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push branch
+        if: steps.diff.outputs.changed == 'true'
+        run: git push --set-upstream origin "$SYNC_BRANCH"
+
+      - name: Create PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "$SYNC_BRANCH" \
+            --title "Sync upstream Codex" \
+            --body "Automated sync from openai/codex main."

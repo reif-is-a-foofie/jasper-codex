@@ -1,0 +1,12 @@
+{
+  "name": "@jasper/overlay-shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "jasper": "bin/jasper.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

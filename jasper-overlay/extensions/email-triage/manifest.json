@@ -1,0 +1,10 @@
+{
+  "id": "email-triage",
+  "name": "Email Triage",
+  "instructions": [
+    "instructions.md"
+  ],
+  "env": {
+    "JASPER_EMAIL_TRIAGE": "enabled"
+  }
+}
