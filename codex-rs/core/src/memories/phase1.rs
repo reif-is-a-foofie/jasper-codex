@@ -13,6 +13,7 @@ use crate::rollout::policy::should_persist_response_item_for_memories;
 use codex_api::ResponseEvent;
 use codex_otel::OtelManager;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
+use codex_protocol::config_types::ServiceTier;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
@@ -20,7 +21,7 @@ use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::TokenUsage;
-use codex_utils_sanitizer::redact_secrets;
+use codex_secrets::redact_secrets;
 use futures::StreamExt;
 use serde::Deserialize;
 use serde_json::Value;
@@ -36,6 +37,7 @@ pub(in crate::memories) struct RequestContext {
     pub(in crate::memories) otel_manager: OtelManager,
     pub(in crate::memories) reasoning_effort: Option<ReasoningEffortConfig>,
     pub(in crate::memories) reasoning_summary: ReasoningSummaryConfig,
+    pub(in crate::memories) service_tier: Option<ServiceTier>,
     pub(in crate::memories) turn_metadata_header: Option<String>,
 }
 
@@ -80,6 +82,12 @@ struct StageOneOutput {
 /// 3) run stage-1 extraction jobs in parallel
 /// 4) emit metrics and logs
 pub(in crate::memories) async fn run(session: &Arc<Session>, config: &Config) {
+    let _phase_one_e2e_timer = session
+        .services
+        .otel_manager
+        .start_timer(metrics::MEMORY_PHASE_ONE_E2E_MS, &[])
+        .ok();
+
     // 1. Claim startup job.
     let Some(claimed_candidates) = claim_startup_jobs(session, &config.memories).await else {
         return;
@@ -136,8 +144,9 @@ impl RequestContext {
             model_info,
             turn_metadata_header,
             otel_manager: turn_context.otel_manager.clone(),
-            reasoning_effort: turn_context.reasoning_effort,
+            reasoning_effort: Some(phase_one::REASONING_EFFORT),
             reasoning_summary: turn_context.reasoning_summary,
+            service_tier: turn_context.config.service_tier,
         }
     }
 }
@@ -187,7 +196,7 @@ async fn claim_startup_jobs(
 async fn build_request_context(session: &Arc<Session>, config: &Config) -> RequestContext {
     let model_name = config
         .memories
-        .phase_1_model
+        .extract_model
         .clone()
         .unwrap_or(phase_one::MODEL.to_string());
     let model = session
@@ -316,6 +325,7 @@ mod job {
                 &stage_one_context.otel_manager,
                 stage_one_context.reasoning_effort,
                 stage_one_context.reasoning_summary,
+                stage_one_context.service_tier,
                 stage_one_context.turn_metadata_header.as_deref(),
             )
             .await?;
