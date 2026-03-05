@@ -11,6 +11,7 @@ use anyhow::anyhow;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use oauth2::TokenResponse;
+use reqwest::cookie::Jar;
 use reqwest::header::AUTHORIZATION;
 use reqwest::header::HeaderMap;
 use rmcp::model::CallToolRequestParams;
@@ -242,6 +243,7 @@ impl RmcpClient {
         http_headers: Option<HashMap<String, String>>,
         env_http_headers: Option<HashMap<String, String>>,
         store_mode: OAuthCredentialsStoreMode,
+        cookie_jar: Option<Arc<Jar>>,
     ) -> Result<Self> {
         let default_headers = build_default_headers(http_headers, env_http_headers)?;
 
@@ -265,6 +267,7 @@ impl RmcpClient {
                 initial_tokens.clone(),
                 store_mode,
                 default_headers.clone(),
+                cookie_jar.clone(),
             )
             .await
             {
@@ -290,8 +293,7 @@ impl RmcpClient {
                         StreamableHttpClientTransportConfig::with_uri(url.to_string())
                             .auth_header(access_token);
                     let http_client =
-                        apply_default_headers(reqwest::Client::builder(), &default_headers)
-                            .build()?;
+                        build_http_client(default_headers.clone(), cookie_jar.clone())?;
                     let transport =
                         StreamableHttpClientTransport::with_client(http_client, http_config);
                     PendingTransport::StreamableHttp { transport }
@@ -304,8 +306,7 @@ impl RmcpClient {
                 http_config = http_config.auth_header(bearer_token);
             }
 
-            let http_client =
-                apply_default_headers(reqwest::Client::builder(), &default_headers).build()?;
+            let http_client = build_http_client(default_headers, cookie_jar)?;
 
             let transport = StreamableHttpClientTransport::with_client(http_client, http_config);
             PendingTransport::StreamableHttp { transport }
@@ -589,12 +590,12 @@ async fn create_oauth_transport_and_runtime(
     initial_tokens: StoredOAuthTokens,
     credentials_store: OAuthCredentialsStoreMode,
     default_headers: HeaderMap,
+    cookie_jar: Option<Arc<Jar>>,
 ) -> Result<(
     StreamableHttpClientTransport<AuthClient<reqwest::Client>>,
     OAuthPersistor,
 )> {
-    let http_client =
-        apply_default_headers(reqwest::Client::builder(), &default_headers).build()?;
+    let http_client = build_http_client(default_headers, cookie_jar)?;
     let mut oauth_state = OAuthState::new(url.to_string(), Some(http_client.clone())).await?;
 
     oauth_state
@@ -629,4 +630,16 @@ async fn create_oauth_transport_and_runtime(
     );
 
     Ok((transport, runtime))
+}
+
+fn build_http_client(
+    default_headers: HeaderMap,
+    cookie_jar: Option<Arc<Jar>>,
+) -> Result<reqwest::Client> {
+    let builder = apply_default_headers(reqwest::Client::builder(), &default_headers);
+    let builder = match cookie_jar {
+        Some(cookie_jar) => builder.cookie_provider(cookie_jar),
+        None => builder,
+    };
+    Ok(builder.build()?)
 }

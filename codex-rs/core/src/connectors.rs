@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::Mutex as StdMutex;
 use std::time::Duration;
@@ -16,6 +17,7 @@ use rmcp::model::ToolAnnotations;
 use serde::Deserialize;
 use tracing::warn;
 
+use crate::AppsMcpCookieStore;
 use crate::AuthManager;
 use crate::CodexAuth;
 use crate::SandboxState;
@@ -103,15 +105,48 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_options(
     force_refetch: bool,
 ) -> anyhow::Result<Vec<AppInfo>> {
     Ok(
-        list_accessible_connectors_from_mcp_tools_with_options_and_status(config, force_refetch)
-            .await?
-            .connectors,
+        list_accessible_connectors_from_mcp_tools_with_options_and_status_and_cookie_store(
+            config,
+            force_refetch,
+            None,
+        )
+        .await?
+        .connectors,
     )
 }
 
 pub async fn list_accessible_connectors_from_mcp_tools_with_options_and_status(
     config: &Config,
     force_refetch: bool,
+) -> anyhow::Result<AccessibleConnectorsStatus> {
+    list_accessible_connectors_from_mcp_tools_with_options_and_status_and_cookie_store(
+        config,
+        force_refetch,
+        None,
+    )
+    .await
+}
+
+pub async fn list_accessible_connectors_from_mcp_tools_with_options_and_cookie_store(
+    config: &Config,
+    force_refetch: bool,
+    apps_mcp_cookie_store: Option<Arc<AppsMcpCookieStore>>,
+) -> anyhow::Result<Vec<AppInfo>> {
+    Ok(
+        list_accessible_connectors_from_mcp_tools_with_options_and_status_and_cookie_store(
+            config,
+            force_refetch,
+            apps_mcp_cookie_store,
+        )
+        .await?
+        .connectors,
+    )
+}
+
+async fn list_accessible_connectors_from_mcp_tools_with_options_and_status_and_cookie_store(
+    config: &Config,
+    force_refetch: bool,
+    apps_mcp_cookie_store: Option<Arc<AppsMcpCookieStore>>,
 ) -> anyhow::Result<AccessibleConnectorsStatus> {
     if !config.features.enabled(Feature::Apps) {
         return Ok(AccessibleConnectorsStatus {
@@ -139,6 +174,11 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_options_and_status(
             codex_apps_ready: true,
         });
     }
+    let apps_mcp_cookie_store =
+        apps_mcp_cookie_store.unwrap_or_else(|| Arc::new(AppsMcpCookieStore::default()));
+    let apps_mcp_cookie_jar = mcp_servers
+        .contains_key(CODEX_APPS_MCP_SERVER_NAME)
+        .then(|| apps_mcp_cookie_store.jar_for(config, auth.as_ref()));
 
     let auth_status_entries =
         compute_auth_statuses(mcp_servers.iter(), config.mcp_oauth_credentials_store_mode).await;
@@ -162,6 +202,7 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_options_and_status(
         sandbox_state,
         config.codex_home.clone(),
         codex_apps_tools_cache_key(auth.as_ref()),
+        apps_mcp_cookie_jar,
     )
     .await;
 

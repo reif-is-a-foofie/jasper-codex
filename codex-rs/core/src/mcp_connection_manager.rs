@@ -45,6 +45,7 @@ use codex_rmcp_client::SendElicitation;
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::future::Shared;
+use reqwest::cookie::Jar;
 use rmcp::model::ClientCapabilities;
 use rmcp::model::CreateElicitationRequestParams;
 use rmcp::model::ElicitationAction;
@@ -398,6 +399,7 @@ impl AsyncManagedClient {
         server_name: String,
         config: McpServerConfig,
         store_mode: OAuthCredentialsStoreMode,
+        codex_apps_cookie_jar: Option<Arc<Jar>>,
         cancel_token: CancellationToken,
         tx_event: Sender<Event>,
         elicitation_requests: ElicitationRequestManager,
@@ -418,8 +420,15 @@ impl AsyncManagedClient {
                     return Err(error.into());
                 }
 
-                let client =
-                    Arc::new(make_rmcp_client(&server_name, config.transport, store_mode).await?);
+                let client = Arc::new(
+                    make_rmcp_client(
+                        &server_name,
+                        config.transport,
+                        store_mode,
+                        codex_apps_cookie_jar,
+                    )
+                    .await?,
+                );
                 match start_server_task(
                     server_name,
                     client,
@@ -552,6 +561,7 @@ impl McpConnectionManager {
         initial_sandbox_state: SandboxState,
         codex_home: PathBuf,
         codex_apps_tools_cache_key: CodexAppsToolsCacheKey,
+        codex_apps_cookie_jar: Option<Arc<Jar>>,
     ) -> (Self, CancellationToken) {
         let cancel_token = CancellationToken::new();
         let mut clients = HashMap::new();
@@ -564,6 +574,11 @@ impl McpConnectionManager {
                 server_origins.insert(server_name.clone(), origin);
             }
             let cancel_token = cancel_token.child_token();
+            let server_cookie_jar = if server_name == CODEX_APPS_MCP_SERVER_NAME {
+                codex_apps_cookie_jar.clone()
+            } else {
+                None
+            };
             let _ = emit_update(
                 &tx_event,
                 McpStartupUpdateEvent {
@@ -584,6 +599,7 @@ impl McpConnectionManager {
                 server_name.clone(),
                 cfg,
                 store_mode,
+                server_cookie_jar,
                 cancel_token.clone(),
                 tx_event.clone(),
                 elicitation_requests.clone(),
@@ -1319,6 +1335,7 @@ async fn make_rmcp_client(
     server_name: &str,
     transport: McpServerTransportConfig,
     store_mode: OAuthCredentialsStoreMode,
+    cookie_jar: Option<Arc<Jar>>,
 ) -> Result<RmcpClient, StartupOutcomeError> {
     match transport {
         McpServerTransportConfig::Stdio {
@@ -1352,6 +1369,7 @@ async fn make_rmcp_client(
                 http_headers,
                 env_http_headers,
                 store_mode,
+                cookie_jar,
             )
             .await
             .map_err(StartupOutcomeError::from)
