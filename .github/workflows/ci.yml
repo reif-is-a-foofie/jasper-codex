@@ -53,7 +53,7 @@ jobs:
           TMP_VENDOR_SRC="$(mktemp -d)"
           TMP_VENDOR_PACKAGE_STAGE="$(mktemp -d)"
           TMP_PACKAGE_PACK_DIR="$(mktemp -d)"
-          TMP_PACKAGE_TGZ="$TMP_PACKAGE_PACK_DIR/jasper-codex-0.1.0.tgz"
+          TMP_PACKAGE_TGZ="$TMP_PACKAGE_PACK_DIR/jasper-ai-0.1.0.tgz"
           mkdir -p "$TMP_TOOLS_ROOT/generated/tools"
           mkdir -p "$TMP_VENDOR_SRC/x86_64-unknown-linux-musl/codex"
           mkdir -p "$TMP_VENDOR_SRC/x86_64-unknown-linux-musl/path"

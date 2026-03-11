@@ -1,4 +1,4 @@
-<p align="center"><code>node jasper-overlay/bin/jasper.js</code><br />or stage an installable package with <code>python3 jasper-overlay/scripts/build_package.py --version 0.1.0 --vendor-src codex-cli/vendor --pack-output ./dist/jasper-codex-0.1.0.tgz</code></p>
+<p align="center"><code>node jasper-overlay/bin/jasper.js</code><br />or stage an installable package with <code>python3 jasper-overlay/scripts/build_package.py --version 0.1.0 --pack-output ./dist/jasper-ai-0.1.0.tgz</code></p>
 <p align="center"><strong>Jasper</strong> is a personal intelligence system built as a maintained Codex fork.</p>
 <p align="center">
   Jasper adds identity, persistent memory, environment listeners, reflections, and tool generation on top of the upstream runtime while keeping the fork update-safe.
@@ -21,9 +21,9 @@ node jasper-overlay/bin/jasper.js
 python3 codex-cli/scripts/install_native_deps.py
 python3 jasper-overlay/scripts/build_package.py \
   --version 0.1.0 \
-  --pack-output ./dist/jasper-codex-0.1.0.tgz
+  --pack-output ./dist/jasper-ai-0.1.0.tgz
 
-npm install -g ./dist/jasper-codex-0.1.0.tgz
+npm install -g ./dist/jasper-ai-0.1.0.tgz
 jasper
 ```
 
@@ -31,6 +31,7 @@ jasper
 
 - The packaged `jasper` launcher uses the bundled native Codex binary plus Jasper-owned JS modules.
 - If `codex-cli/vendor` is already hydrated, the Jasper packager will pick it up automatically.
+- End-user OpenAI authentication and guided setup are intentionally deferred for now. Packaged users will still need manual credential and connector setup until onboarding is implemented.
 - Some deeper docs and source directories still use Codex naming because the fork inherits upstream internals.
 - The maintained Jasper product contract lives in [docs/jasper/PROJECT_DETAILS.md](./docs/jasper/PROJECT_DETAILS.md).
 

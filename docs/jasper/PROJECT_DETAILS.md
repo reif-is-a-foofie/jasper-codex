@@ -251,6 +251,8 @@ Packaging goals:
 - provide a reproducible local install path for macOS, Linux, and Windows-compatible environments
 - keep launcher, identity, memory, and tool systems packageable as Jasper-owned modules
 - support future release artifacts that let operators install Jasper without rebuilding the full stack manually
+- accept that early packaged releases will still require manual OpenAI authentication and connector setup until guided onboarding is implemented
+- document that guided credential onboarding is a future milestone, not a blocker for the current packaging work
 
 ## Fork Strategy
 

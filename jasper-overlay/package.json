@@ -1,5 +1,5 @@
 {
-  "name": "jasper-codex",
+  "name": "jasper-ai",
   "description": "Jasper launcher and runtime package built on the Jasper Codex fork.",
   "type": "module",
   "version": "0.1.0",
