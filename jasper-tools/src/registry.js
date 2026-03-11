@@ -1,5 +1,7 @@
 import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
 import { createEventStore } from "../../jasper-memory/src/event-store.js";
+import { materializeGeneratedTool } from "./generated-tool.js";
+import { loadGeneratedRegistry } from "./generator.js";
 import { createIdentitySummaryTool } from "./tools/identity-summary.js";
 import { createRecentMemoryTool } from "./tools/recent-memory.js";
 import { createSemanticMemorySearchTool } from "./tools/semantic-memory-search.js";
@@ -13,10 +15,22 @@ export function createToolContext(options = {}) {
 
 export function createToolRegistry(options = {}) {
   const context = createToolContext(options);
+  const generatedTools = loadGeneratedRegistry(options.toolsRoot).map((entry) =>
+    materializeGeneratedTool(
+      {
+        id: entry.id,
+        template: entry.template,
+        description: entry.description,
+        defaults: entry.defaults,
+      },
+      context,
+    ),
+  );
   const tools = [
     createIdentitySummaryTool(context),
     createRecentMemoryTool(context),
     createSemanticMemorySearchTool(context),
+    ...generatedTools,
   ];
 
   return {

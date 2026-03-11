@@ -33,3 +33,8 @@ Milestone 5 begins with:
 - dream-state reflection generation over recent memory events
 - cluster summaries stored in `jasper-memory/data/clusters/`
 - reflection records stored in `jasper-memory/data/reflections/`
+
+Milestone 6 begins with:
+
+- generated tool specs and modules in `jasper-tools/generated/`
+- CLI-driven tool generation from repeatable templates

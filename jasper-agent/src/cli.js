@@ -3,6 +3,8 @@
 import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
 import { createEventStore } from "../../jasper-memory/src/event-store.js";
 import { createReflectionStore } from "../../jasper-memory/src/reflections.js";
+import { generateToolFromTemplate } from "../../jasper-tools/src/generator.js";
+import { listGeneratorTemplates } from "../../jasper-tools/src/generator.js";
 import { createToolRegistry } from "../../jasper-tools/src/registry.js";
 import { createJasperRuntime } from "./runtime.js";
 
@@ -16,6 +18,8 @@ function printUsage() {
   node jasper-agent/src/cli.js dream reflect [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js dream recent [--memory-root PATH] [--limit N]
   node jasper-agent/src/cli.js tools list [--identity PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js tools templates
+  node jasper-agent/src/cli.js tools generate --id TOOL_ID --template TEMPLATE --description TEXT [--tools-root PATH] [--query TEXT] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js tools run TOOL_ID [--identity PATH] [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE] [--query TEXT]
 `);
 }
@@ -96,6 +100,26 @@ function parseArgs(argv) {
     }
     if (arg === "--listener-max-recent-files") {
       options.listenerMaxRecentFiles = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--tools-root") {
+      options.toolsRoot = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--id") {
+      options.id = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--description") {
+      options.description = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--template") {
+      options.template = args[index + 1];
       index += 1;
       continue;
     }
@@ -184,10 +208,32 @@ async function main() {
     const registry = createToolRegistry({
       identityPath: toolOptions.identityPath,
       memoryRoot: toolOptions.memoryRoot,
+      toolsRoot: toolOptions.toolsRoot,
     });
 
     if (toolCommand === "list") {
       printJson(registry.listTools());
+      return;
+    }
+
+    if (toolCommand === "templates") {
+      printJson(listGeneratorTemplates());
+      return;
+    }
+
+    if (toolCommand === "generate") {
+      printJson(
+        generateToolFromTemplate({
+          id: toolOptions.id,
+          template: toolOptions.template,
+          description: toolOptions.description,
+          toolsRoot: toolOptions.toolsRoot,
+          query: toolOptions.query,
+          limit: toolOptions.limit,
+          type: toolOptions.type,
+          source: toolOptions.source,
+        }),
+      );
       return;
     }
 
