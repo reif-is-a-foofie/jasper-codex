@@ -14,4 +14,5 @@ Milestone 2 adds:
 - raw event persistence through `jasper-memory/`
 - recent-context retrieval on startup
 - relevant-memory lookup during runtime ticks
+- local semantic retrieval through deterministic embeddings
 - CLI memory inspection through `memory recent` and `memory search`

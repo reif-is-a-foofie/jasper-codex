@@ -17,5 +17,7 @@ Current capabilities:
 - append structured events with source, tags, payload, and session identity
 - retrieve recent events
 - search relevant events with lightweight keyword scoring
+- generate deterministic local embeddings for stored events
+- run semantic retrieval without external model dependencies
 
 This directory remains Jasper-owned and should absorb future embedding, clustering, and reflection work before any upstream Codex integration is considered.

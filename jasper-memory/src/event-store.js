@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cosineSimilarity } from "./embeddings.js";
+import { createEventEmbedding } from "./embeddings.js";
+import { embedText } from "./embeddings.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,6 +89,22 @@ function parseEventLine(line) {
   }
 }
 
+function parseEmbeddingLine(line) {
+  if (!line.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(line);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function defaultMemoryRoot() {
   return memoryRoot;
 }
@@ -109,6 +128,11 @@ export function ensureMemoryLayout(options = {}) {
 export function defaultEventLogPath(options = {}) {
   const layout = ensureMemoryLayout(options);
   return path.join(layout.eventsDir, "events.jsonl");
+}
+
+export function defaultEmbeddingLogPath(options = {}) {
+  const layout = ensureMemoryLayout(options);
+  return path.join(layout.embeddingsDir, "events.jsonl");
 }
 
 export function createMemoryEvent(input = {}) {
@@ -146,6 +170,8 @@ export class JasperEventStore {
     this.root = this.layout.root;
     this.defaultSource = String(options.source || "jasper").trim() || "jasper";
     this.eventLogPath = defaultEventLogPath({ root: this.root });
+    this.embeddingLogPath = defaultEmbeddingLogPath({ root: this.root });
+    this.embeddingDimension = Math.max(8, Number(options.embeddingDimension ?? 64));
   }
 
   appendEvent(input = {}) {
@@ -154,6 +180,10 @@ export class JasperEventStore {
       source: input.source || this.defaultSource,
     });
     fs.appendFileSync(this.eventLogPath, `${JSON.stringify(event)}\n`, "utf8");
+    const embedding = createEventEmbedding(event, {
+      dimension: this.embeddingDimension,
+    });
+    fs.appendFileSync(this.embeddingLogPath, `${JSON.stringify(embedding)}\n`, "utf8");
     return event;
   }
 
@@ -195,6 +225,18 @@ export class JasperEventStore {
     });
   }
 
+  readEmbeddings() {
+    if (!fs.existsSync(this.embeddingLogPath)) {
+      return [];
+    }
+
+    return fs
+      .readFileSync(this.embeddingLogPath, "utf8")
+      .split(/\r?\n/)
+      .map(parseEmbeddingLine)
+      .filter(Boolean);
+  }
+
   listRecentEvents(options = {}) {
     const limit = normalizeLimit(options.limit, 20);
     return this.queryEvents(options).slice(-limit).reverse();
@@ -223,6 +265,41 @@ export class JasperEventStore {
       .map((item) => ({
         ...item.event,
         relevanceScore: item.relevanceScore,
+      }));
+  }
+
+  searchSemanticEvents(options = {}) {
+    const query = String(options.query || "").trim();
+    if (!query) {
+      return [];
+    }
+
+    const limit = normalizeLimit(options.limit, 10);
+    const queryVector = embedText(query, {
+      dimension: this.embeddingDimension,
+    });
+    const eventMap = new Map(this.queryEvents(options).map((event) => [event.id, event]));
+
+    return this.readEmbeddings()
+      .filter((embedding) => eventMap.has(embedding.eventId))
+      .map((embedding) => {
+        const event = eventMap.get(embedding.eventId);
+        return {
+          event,
+          vectorScore: cosineSimilarity(queryVector, embedding.vector),
+        };
+      })
+      .filter((item) => item.event && item.vectorScore > 0)
+      .sort((left, right) => {
+        if (right.vectorScore !== left.vectorScore) {
+          return right.vectorScore - left.vectorScore;
+        }
+        return String(right.event.ts || "").localeCompare(String(left.event.ts || ""));
+      })
+      .slice(0, limit)
+      .map((item) => ({
+        ...item.event,
+        vectorScore: item.vectorScore,
       }));
   }
 }

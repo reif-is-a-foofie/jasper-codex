@@ -100,13 +100,25 @@ export class JasperRuntime {
   }
 
   loadRelevantMemory() {
+    const query = [
+      this.identity?.config?.identity?.role,
+      ...(this.identity?.config?.mission || []),
+      "runtime",
+      "household",
+    ].join(" ");
+
+    const semantic = this.memory.searchSemanticEvents({
+      query,
+      limit: 3,
+      excludeSessionId: this.sessionId,
+    });
+
+    if (semantic.length > 0) {
+      return semantic;
+    }
+
     return this.memory.searchRelevantEvents({
-      query: [
-        this.identity?.config?.identity?.role,
-        ...(this.identity?.config?.mission || []),
-        "runtime",
-        "household",
-      ].join(" "),
+      query,
       limit: 3,
       excludeSessionId: this.sessionId,
     });
@@ -152,6 +164,9 @@ export class JasperRuntime {
           mission: this.identity.config.mission,
           relevantMemoryIds: relevantMemory.map((event) => event.id),
           relevantMemoryTypes: relevantMemory.map((event) => event.type),
+          relevantMemoryScores: relevantMemory.map((event) =>
+            event.vectorScore ?? event.relevanceScore ?? 0,
+          ),
         },
         {
           tags: ["runtime", "heartbeat"],

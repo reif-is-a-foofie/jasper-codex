@@ -10,6 +10,7 @@ function printUsage() {
   node jasper-agent/src/cli.js identity [--identity PATH]
   node jasper-agent/src/cli.js memory recent [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js memory search QUERY [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
+  node jasper-agent/src/cli.js memory semantic QUERY [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
 `);
 }
 
@@ -110,6 +111,23 @@ async function main() {
 
       printJson(
         store.searchRelevantEvents({
+          query,
+          limit: memoryOptions.limit,
+          type: memoryOptions.type,
+          source: memoryOptions.source,
+        }),
+      );
+      return;
+    }
+
+    if (memoryCommand === "semantic") {
+      const query = memoryOptions.positionals.join(" ").trim();
+      if (!query) {
+        throw new Error("Memory semantic search requires a query string");
+      }
+
+      printJson(
+        store.searchSemanticEvents({
           query,
           limit: memoryOptions.limit,
           type: memoryOptions.type,
