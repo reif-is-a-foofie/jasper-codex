@@ -27,3 +27,9 @@ Milestone 4 now includes:
 - environment listeners under `jasper-agent/src/listeners/`
 - a session snapshot listener
 - a polling filesystem listener that writes observations into memory
+
+Milestone 5 begins with:
+
+- dream-state reflection generation over recent memory events
+- cluster summaries stored in `jasper-memory/data/clusters/`
+- reflection records stored in `jasper-memory/data/reflections/`

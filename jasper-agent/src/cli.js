@@ -2,6 +2,7 @@
 
 import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
 import { createEventStore } from "../../jasper-memory/src/event-store.js";
+import { createReflectionStore } from "../../jasper-memory/src/reflections.js";
 import { createToolRegistry } from "../../jasper-tools/src/registry.js";
 import { createJasperRuntime } from "./runtime.js";
 
@@ -12,6 +13,8 @@ function printUsage() {
   node jasper-agent/src/cli.js memory recent [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js memory search QUERY [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js memory semantic QUERY [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
+  node jasper-agent/src/cli.js dream reflect [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
+  node jasper-agent/src/cli.js dream recent [--memory-root PATH] [--limit N]
   node jasper-agent/src/cli.js tools list [--identity PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js tools run TOOL_ID [--identity PATH] [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE] [--query TEXT]
 `);
@@ -202,6 +205,35 @@ async function main() {
       };
 
       printJson(await registry.runTool(toolId, input));
+      return;
+    }
+
+    printUsage();
+    return;
+  }
+
+  if (command === "dream") {
+    const [dreamCommand, ...dreamArgs] = rest;
+    const dreamOptions = parseArgs(dreamArgs);
+    const store = createReflectionStore({ root: dreamOptions.memoryRoot });
+
+    if (dreamCommand === "reflect") {
+      printJson(
+        store.createAndStoreReflection({
+          limit: dreamOptions.limit,
+          type: dreamOptions.type,
+          source: dreamOptions.source,
+        }),
+      );
+      return;
+    }
+
+    if (dreamCommand === "recent") {
+      printJson(
+        store.listRecentReflections({
+          limit: dreamOptions.limit,
+        }),
+      );
       return;
     }
 

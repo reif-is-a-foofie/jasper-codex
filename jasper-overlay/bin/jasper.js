@@ -75,6 +75,8 @@ if (subcommand === "runtime") {
   child = spawnProcess(process.execPath, [agentCliPath, "memory", ...args.slice(1)], process.env);
 } else if (subcommand === "tools") {
   child = spawnProcess(process.execPath, [agentCliPath, "tools", ...args.slice(1)], process.env);
+} else if (subcommand === "dream") {
+  child = spawnProcess(process.execPath, [agentCliPath, "dream", ...args.slice(1)], process.env);
 } else {
   if (args.length === 0) {
     printBanner();

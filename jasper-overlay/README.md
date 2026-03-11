@@ -18,6 +18,7 @@ Current launcher behavior:
 - `node jasper-overlay/bin/jasper.js runtime --watch-path PATH` enables filesystem observation for a target path
 - `node jasper-overlay/bin/jasper.js memory recent` inspects Jasper raw event memory
 - `node jasper-overlay/bin/jasper.js memory semantic "query"` runs semantic memory lookup
+- `node jasper-overlay/bin/jasper.js dream reflect` generates a Jasper reflection record
 - `node jasper-overlay/bin/jasper.js tools list` lists registered Jasper tools
 
 Do not move Jasper behavior into `codex-rs/` or `codex-cli/` unless the core patch gate in `docs/jasper/FORK_STRATEGY.md` is satisfied.

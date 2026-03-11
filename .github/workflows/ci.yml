@@ -51,6 +51,8 @@ jobs:
           node ./jasper-agent/src/cli.js memory recent --memory-root "$TMP_MEMORY_ROOT" --limit 5
           node ./jasper-agent/src/cli.js memory search runtime --memory-root "$TMP_MEMORY_ROOT" --limit 5
           node ./jasper-agent/src/cli.js memory semantic "household operations" --memory-root "$TMP_MEMORY_ROOT" --limit 5
+          node ./jasper-agent/src/cli.js dream reflect --memory-root "$TMP_MEMORY_ROOT" --limit 10
+          node ./jasper-agent/src/cli.js dream recent --memory-root "$TMP_MEMORY_ROOT" --limit 5
           (sleep 0.12; printf 'hello\n' > "$TMP_WATCH_ROOT"/note.txt) &
           node ./jasper-agent/src/cli.js start --max-ticks 4 --interval-ms 80 --memory-root "$TMP_MEMORY_ROOT" --watch-path "$TMP_WATCH_ROOT" >/dev/null
           node ./jasper-agent/src/cli.js memory search listener.filesystem.changed --memory-root "$TMP_MEMORY_ROOT" --limit 5
@@ -58,6 +60,7 @@ jobs:
           node ./jasper-agent/src/cli.js tools run identity-summary
           node ./jasper-agent/src/cli.js tools run semantic-memory-search --memory-root "$TMP_MEMORY_ROOT" --query "household operations"
           node ./jasper-overlay/bin/jasper.js memory recent --memory-root "$TMP_MEMORY_ROOT" --limit 3
+          node ./jasper-overlay/bin/jasper.js dream reflect --memory-root "$TMP_MEMORY_ROOT" --limit 10
           node ./jasper-overlay/bin/jasper.js tools list
 
       - name: Prettier (run `pnpm run format:fix` to fix)
