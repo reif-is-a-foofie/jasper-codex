@@ -4,10 +4,8 @@ name: Bazel (experimental)
 # https://github.com/cerisier/toolchains_llvm_bootstrapped/blob/main/.github/workflows/ci.yaml
 
 on:
-  pull_request: {}
-  push:
-    branches:
-      - main
+  # Keep Bazel available for explicit upstream compatibility checks without
+  # forcing the Jasper fork onto large hosted runners on every push.
   workflow_dispatch:
 
 concurrency:

@@ -3,7 +3,19 @@ name: sdk
 on:
   push:
     branches: [main]
-  pull_request: {}
+    paths:
+      - "sdk/**"
+      - "codex-rs/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/sdk.yml"
+  pull_request:
+    paths:
+      - "sdk/**"
+      - "codex-rs/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/sdk.yml"
 
 jobs:
   sdks:
