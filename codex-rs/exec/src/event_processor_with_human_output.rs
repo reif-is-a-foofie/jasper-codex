@@ -57,6 +57,33 @@ use codex_utils_sandbox_summary::create_config_summary_entries;
 /// This should be configurable. When used in CI, users may not want to impose
 /// a limit so they can see the full transcript.
 const MAX_OUTPUT_LINES_FOR_EXEC_TOOL_CALL: usize = 20;
+
+fn is_jasper_branded() -> bool {
+    matches!(
+        std::env::var("JASPER_BRANDED").as_deref(),
+        Ok("1" | "true" | "TRUE" | "enabled")
+    )
+}
+
+fn session_header() -> String {
+    if is_jasper_branded() {
+        format!("Jasper v{}", env!("CARGO_PKG_VERSION"))
+    } else {
+        format!(
+            "OpenAI Codex v{} (research preview)",
+            env!("CARGO_PKG_VERSION")
+        )
+    }
+}
+
+fn agent_label() -> &'static str {
+    if is_jasper_branded() {
+        "jasper"
+    } else {
+        "codex"
+    }
+}
+
 pub(crate) struct EventProcessorWithHumanOutput {
     call_id_to_patch: HashMap<String, PatchApplyBegin>,
 
@@ -179,12 +206,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
         prompt: &str,
         session_configured_event: &SessionConfiguredEvent,
     ) {
-        const VERSION: &str = env!("CARGO_PKG_VERSION");
-        ts_msg!(
-            self,
-            "OpenAI Codex v{} (research preview)\n--------",
-            VERSION
-        );
+        ts_msg!(self, "{}\n--------", session_header());
 
         let mut entries =
             create_config_summary_entries(config, session_configured_event.model.as_str());
@@ -278,6 +300,9 @@ impl EventProcessor for EventProcessorWithHumanOutput {
                 } else {
                     parts.join("; ")
                 };
+                if is_jasper_branded() && parts.is_empty() {
+                    return CodexStatus::Running;
+                }
                 ts_msg!(self, "{} {}", "mcp startup:".style(self.cyan), joined);
             }
             EventMsg::BackgroundEvent(BackgroundEventEvent { message }) => {
@@ -348,7 +373,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
                 ts_msg!(
                     self,
                     "{}\n{}",
-                    "codex".style(self.italic).style(self.magenta),
+                    agent_label().style(self.italic).style(self.magenta),
                     message,
                 );
             }

@@ -8,6 +8,7 @@ import { createReflectionStore } from "../../jasper-memory/src/reflections.js";
 import { generateToolFromTemplate } from "../../jasper-tools/src/generator.js";
 import { listGeneratorTemplates } from "../../jasper-tools/src/generator.js";
 import { createToolRegistry } from "../../jasper-tools/src/registry.js";
+import { createCapabilityBroker } from "./broker/index.js";
 import { createJasperRuntime } from "./runtime.js";
 
 function printUsage() {
@@ -26,6 +27,9 @@ function printUsage() {
   node jasper-agent/src/cli.js tools templates
   node jasper-agent/src/cli.js tools generate --id TOOL_ID --template TEMPLATE --description TEXT [--tools-root PATH] [--query TEXT] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js tools run TOOL_ID [--identity PATH] [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE] [--query TEXT]
+  node jasper-agent/src/cli.js broker agents
+  node jasper-agent/src/cli.js broker capabilities
+  node jasper-agent/src/cli.js broker inspect QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
 `);
 }
 
@@ -312,6 +316,44 @@ async function main() {
       };
 
       printJson(await registry.runTool(toolId, input));
+      return;
+    }
+
+    printUsage();
+    return;
+  }
+
+  if (command === "broker") {
+    const [brokerCommand, ...brokerArgs] = rest;
+    const brokerOptions = parseArgs(brokerArgs);
+    const broker = createCapabilityBroker({
+      identityPath: brokerOptions.identityPath,
+      memoryRoot: brokerOptions.memoryRoot,
+      jasperHome: brokerOptions.jasperHome,
+      toolsRoot: brokerOptions.toolsRoot,
+    });
+
+    if (brokerCommand === "agents") {
+      printJson(broker.listInternalAgents());
+      return;
+    }
+
+    if (brokerCommand === "capabilities") {
+      printJson(broker.listCapabilities());
+      return;
+    }
+
+    if (brokerCommand === "inspect") {
+      const query = brokerOptions.positionals.join(" ").trim();
+      if (!query) {
+        throw new Error("Broker inspect requires a query string");
+      }
+
+      printJson(
+        broker.inspectRequest(query, {
+          limit: brokerOptions.limit,
+        }),
+      );
       return;
     }
 

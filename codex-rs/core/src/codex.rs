@@ -4051,12 +4051,33 @@ mod handlers {
             _ => unreachable!(),
         };
 
+        let turn_id = sub_id.clone();
         let Ok(current_context) = sess.new_turn_with_sub_id(sub_id, updates).await else {
             // new_turn_with_sub_id already emits the error event.
             return;
         };
         sess.maybe_emit_unknown_model_warning_for_turn(current_context.as_ref())
             .await;
+        if crate::jasper_memory::is_capture_enabled() {
+            let thread_id = sess.conversation_id.to_string();
+            let client_name = current_context.app_server_client_name.clone();
+            let capture_items = items.clone();
+
+            tokio::task::spawn_blocking(move || {
+                if let Err(err) = crate::jasper_memory::maybe_record_submitted_turn_text(
+                    &thread_id,
+                    &turn_id,
+                    client_name.as_deref(),
+                    &capture_items,
+                ) {
+                    tracing::warn!(
+                        "failed to record Jasper chat activity for thread {}: {}",
+                        thread_id,
+                        err
+                    );
+                }
+            });
+        }
         current_context.otel_manager.user_prompt(&items);
 
         // Attempt to inject input into current task.
@@ -5182,7 +5203,7 @@ pub(crate) async fn run_turn(
                                 event: HookEventAfterAgent {
                                     thread_id: sess.conversation_id,
                                     turn_id: turn_context.sub_id.clone(),
-                                    input_messages: sampling_request_input_messages,
+                                    input_messages: sampling_request_input_messages.clone(),
                                     last_assistant_message: last_agent_message.clone(),
                                 },
                             },
@@ -5228,6 +5249,29 @@ pub(crate) async fn run_turn(
                         )
                         .await;
                         return None;
+                    }
+                    if crate::jasper_memory::is_capture_enabled() {
+                        let thread_id = sess.conversation_id.to_string();
+                        let turn_id = turn_context.sub_id.clone();
+                        let client_name = turn_context.app_server_client_name.clone();
+                        let input_messages = sampling_request_input_messages.clone();
+                        let assistant_message = last_agent_message.clone();
+
+                        tokio::task::spawn_blocking(move || {
+                            if let Err(err) = crate::jasper_memory::maybe_record_completed_turn(
+                                &thread_id,
+                                &turn_id,
+                                client_name.as_deref(),
+                                &input_messages,
+                                assistant_message.as_deref(),
+                            ) {
+                                tracing::warn!(
+                                    "failed to record Jasper semantic turn memory for thread {}: {}",
+                                    thread_id,
+                                    err
+                                );
+                            }
+                        });
                     }
                     break;
                 }

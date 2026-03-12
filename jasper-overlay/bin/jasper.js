@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { buildStartupMemoryInstructions } from "../../jasper-core/src/startup-memory.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,10 +24,16 @@ const localCodexBin = path.join(
   "debug",
   "codex",
 );
+const isDevelopmentCheckout =
+  fs.existsSync(path.join(repoRoot, ".git")) &&
+  fs.existsSync(path.join(repoRoot, "codex-rs", "Cargo.toml"));
 const packagedVendorRoots = [
   path.join(repoRoot, "vendor"),
   path.join(repoRoot, "codex-cli", "vendor"),
 ];
+const codexHome = path.resolve(
+  process.env.CODEX_HOME || path.join(process.env.HOME || "", ".codex"),
+);
 
 function resolveTargetTriple() {
   const { platform, arch } = process;
@@ -68,6 +75,117 @@ function prependPath(entries, currentPath) {
   const delimiter = process.platform === "win32" ? ";" : ":";
   const existing = (currentPath || "").split(delimiter).filter(Boolean);
   return [...entries, ...existing].join(delimiter);
+}
+
+function shouldDisableStartupMcp() {
+  const value = String(process.env.JASPER_ENABLE_STARTUP_MCP || "").trim();
+  return !["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+function configuredMcpDisableArgs() {
+  if (!shouldDisableStartupMcp()) {
+    return [];
+  }
+
+  const configPath = path.join(codexHome, "config.toml");
+  if (!fs.existsSync(configPath)) {
+    return [];
+  }
+
+  const configText = fs.readFileSync(configPath, "utf8");
+  const matches = configText.matchAll(/^\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/gm);
+  const serverNames = [...new Set([...matches].map((match) => match[1]).filter(Boolean))];
+
+  return serverNames.flatMap((serverName) => [
+    "-c",
+    `mcp_servers.${serverName}.enabled=false`,
+  ]);
+}
+
+function commandExists(commandPath) {
+  return Boolean(commandPath) && fs.existsSync(commandPath);
+}
+
+function findCommandOnPath(commandName) {
+  const delimiter = process.platform === "win32" ? ";" : ":";
+  const pathEntries = String(process.env.PATH || "")
+    .split(delimiter)
+    .filter(Boolean);
+
+  const candidateNames =
+    process.platform === "win32"
+      ? [commandName, `${commandName}.exe`, `${commandName}.cmd`]
+      : [commandName];
+
+  for (const entry of pathEntries) {
+    for (const candidateName of candidateNames) {
+      const candidatePath = path.join(entry, candidateName);
+      if (commandExists(candidatePath)) {
+        return candidatePath;
+      }
+    }
+  }
+
+  return null;
+}
+
+function resolveRustupCargoCommand() {
+  const targetTriple = resolveTargetTriple();
+  const toolchainCargoCandidates = [
+    process.env.JASPER_CARGO_BIN,
+    targetTriple
+      ? path.join(
+          process.env.HOME || "",
+          ".rustup",
+          "toolchains",
+          `stable-${targetTriple}`,
+          "bin",
+          "cargo",
+        )
+      : null,
+    path.join(
+      process.env.HOME || "",
+      ".rustup",
+      "toolchains",
+      "stable-x86_64-apple-darwin",
+      "bin",
+      "cargo",
+    ),
+    path.join(
+      process.env.HOME || "",
+      ".rustup",
+      "toolchains",
+      "stable-aarch64-apple-darwin",
+      "bin",
+      "cargo",
+    ),
+  ].filter(Boolean);
+
+  const toolchainCargoPath = toolchainCargoCandidates.find(commandExists);
+  if (toolchainCargoPath) {
+    const toolchainBinDir = path.dirname(toolchainCargoPath);
+    return {
+      command: toolchainCargoPath,
+      args: [],
+      env: {
+        PATH: prependPath([toolchainBinDir], process.env.PATH),
+        RUSTC:
+          process.env.JASPER_RUSTC_BIN ||
+          path.join(toolchainBinDir, process.platform === "win32" ? "rustc.exe" : "rustc"),
+      },
+    };
+  }
+
+  const rustupPath = findCommandOnPath("rustup") || "/usr/local/bin/rustup";
+  if (commandExists(rustupPath)) {
+    return {
+      command: rustupPath,
+      args: ["run", "stable", "cargo"],
+      env: {},
+    };
+  }
+
+  return null;
 }
 
 function resolvePackagedCodex() {
@@ -120,11 +238,58 @@ function printBanner() {
     `${cyan}  \\___/ \\__,_|___/ .__/ \\___|_|   ${reset}`,
     `${cyan}                  |_|             ${reset}`,
     `${dim}Welcome, I am Jasper.${reset}`,
-    `${dim}Household intelligence layered onto Codex.${reset}`,
+    `${dim}Household intelligence for daily operations.${reset}`,
     "",
   ];
 
   process.stdout.write(`${lines.join("\n")}\n`);
+}
+
+function jasperVersion() {
+  const packageJsonPath = path.join(repoRoot, "jasper-overlay", "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    return "0.0.0";
+  }
+
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+    return String(packageJson.version || "0.0.0");
+  } catch {
+    return "0.0.0";
+  }
+}
+
+function printTopLevelHelp() {
+  process.stdout.write(`Jasper CLI
+
+Usage: jasper [OPTIONS] [PROMPT]
+       jasper [OPTIONS] <COMMAND> [ARGS]
+
+Commands:
+  exec        Run Jasper non-interactively
+  review      Run a code review non-interactively
+  login       Manage login
+  logout      Remove stored authentication credentials
+  app         Launch the desktop app flow on macOS
+  identity    Show Jasper identity configuration
+  memory      Inspect Jasper memory
+  tools       Inspect and run Jasper tools
+  broker      Inspect Jasper capability routing
+  dream       Inspect Jasper reflections
+  setup       Prepare Jasper local runtime state
+  help        Print this message
+
+Options:
+  -h, --help       Print help
+  -V, --version    Print version
+  -C, --cd <DIR>   Use the specified directory as the working root
+  -m, --model      Select the model
+  -p, --profile    Select a config profile
+  --search         Enable live web search
+  --no-alt-screen  Disable alternate screen mode
+
+Jasper forwards Codex-compatible options to the underlying runtime while keeping Jasper branding and startup policy intact.
+`);
 }
 
 function spawnProcess(command, commandArgs, env) {
@@ -133,6 +298,41 @@ function spawnProcess(command, commandArgs, env) {
     stdio: "inherit",
     env,
   });
+}
+
+function jasperDeveloperInstructions() {
+  const sections = [
+    "You are Jasper, the Tauati household intelligence system layered on top of Codex.",
+    "Never refer to yourself as Codex when speaking to the user.",
+    "If asked who you are, answer that you are Jasper.",
+    "Keep internal agent codenames, MCP server names, and provider plumbing hidden unless the user explicitly asks for internals.",
+  ];
+  const memoryInstructions = buildStartupMemoryInstructions();
+  if (memoryInstructions) {
+    sections.push(memoryInstructions);
+  }
+  return sections.join("\n\n");
+}
+
+function jasperCodexConfigArgs() {
+  return [
+    ...configuredMcpDisableArgs(),
+    "-c",
+    `developer_instructions=${JSON.stringify(jasperDeveloperInstructions())}`,
+  ];
+}
+
+function cargoRunCodexArgs() {
+  return [
+    "run",
+    "--quiet",
+    "--manifest-path",
+    "codex-rs/Cargo.toml",
+    "--bin",
+    "codex",
+    "--",
+    ...jasperCodexConfigArgs(),
+  ];
 }
 
 function resolveCodexCommand() {
@@ -149,33 +349,80 @@ function resolveCodexCommand() {
     return packagedCodex;
   }
 
+  const preferCargo = isDevelopmentCheckout && process.env.JASPER_PREFER_LOCAL_BINARY !== "1";
+  if (preferCargo) {
+    const cargoPath = findCommandOnPath("cargo");
+    if (cargoPath) {
+      return {
+        command: cargoPath,
+        args: cargoRunCodexArgs(),
+        env: {},
+      };
+    }
+
+    const rustupCargo = resolveRustupCargoCommand();
+    if (rustupCargo) {
+      return {
+        command: rustupCargo.command,
+        args: [...rustupCargo.args, ...cargoRunCodexArgs()],
+        env: rustupCargo.env,
+      };
+    }
+  }
+
   if (fs.existsSync(localCodexBin)) {
     return {
       command: localCodexBin,
-      args: [],
+      args: jasperCodexConfigArgs(),
       env: {},
     };
   }
 
-  return {
-    command: "cargo",
-    args: [
-      "run",
-      "--manifest-path",
-      "codex-rs/Cargo.toml",
-      "--bin",
-      "codex",
-      "--",
-    ],
-    env: {},
-  };
+  const cargoPath = findCommandOnPath("cargo");
+  if (cargoPath) {
+    return {
+      command: cargoPath,
+      args: cargoRunCodexArgs(),
+      env: {},
+    };
+  }
+
+  const rustupCargo = resolveRustupCargoCommand();
+  if (rustupCargo) {
+    return {
+      command: rustupCargo.command,
+      args: [...rustupCargo.args, ...cargoRunCodexArgs()],
+      env: rustupCargo.env,
+    };
+  }
+
+  throw new Error(
+    "Jasper could not find a packaged runtime or a Rust toolchain. Install Jasper from a packaged build or install Rust before launching Jasper from source.",
+  );
 }
 
 const [, , ...args] = process.argv;
 const subcommand = args[0] || "";
 
 let child;
-if (subcommand === "runtime") {
+if (
+  args.length === 0
+    ? false
+    : subcommand === "--help" ||
+      subcommand === "-h" ||
+      subcommand === "help"
+) {
+  printTopLevelHelp();
+  process.exit(0);
+} else if (
+  args.length === 0
+    ? false
+    : subcommand === "--version" ||
+      subcommand === "-V"
+) {
+  process.stdout.write(`jasper ${jasperVersion()}\n`);
+  process.exit(0);
+} else if (subcommand === "runtime") {
   child = spawnProcess(
     process.execPath,
     [agentCliPath, "start", ...args.slice(1)],
@@ -199,6 +446,12 @@ if (subcommand === "runtime") {
     [agentCliPath, "tools", ...args.slice(1)],
     process.env,
   );
+} else if (subcommand === "broker") {
+  child = spawnProcess(
+    process.execPath,
+    [agentCliPath, "broker", ...args.slice(1)],
+    process.env,
+  );
 } else if (subcommand === "dream") {
   child = spawnProcess(
     process.execPath,
@@ -212,11 +465,11 @@ if (subcommand === "runtime") {
     process.env,
   );
 } else {
+  const codex = resolveCodexCommand();
   if (args.length === 0) {
     printBanner();
   }
 
-  const codex = resolveCodexCommand();
   child = spawnProcess(codex.command, [...codex.args, ...args], {
     ...process.env,
     ...codex.env,

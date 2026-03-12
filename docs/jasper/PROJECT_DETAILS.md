@@ -86,6 +86,9 @@ Vector search enables retrieval of relevant past information.
 Memory capture requirement:
 
 - every explicit user action must be recorded as a raw event before any semantic materialization
+- raw-event capture should return immediately while embedding/materialization runs asynchronously
+- while Jasper is live, each completed turn should produce an asynchronous semantic-memory snapshot of the turn context
+- dream state is for later consolidation, reflection, and chunking rather than first-pass turn capture
 - the first required user-activity source is submitted chat text
 - later phases extend the same event contract to tools, approvals, terminal activity, filesystem actions, and connector events
 
@@ -141,7 +144,34 @@ Each tool contains:
 
 The reasoning engine chooses which tool to use.
 
-### 5. Tool Creation
+### 5. Capability Brokerage
+
+Jasper must route requests through a capability broker before it talks about tools, MCP servers, or connectors.
+
+Rules:
+
+- users ask for outcomes, not infrastructure
+- Jasper translates the request into capability needs
+- provider details remain internal to Jasper
+- trusted capabilities may be auto-provisioned
+- consent-gated connectors must ask permission before access
+- MCP-backed capabilities should start on demand, not at Jasper boot
+
+Example:
+
+```text
+user asks a question
+↓
+Jasper identifies capability
+↓
+Jasper selects builtin / connector / claw / mcp path
+↓
+Jasper provisions if needed
+↓
+Jasper answers
+```
+
+### 6. Tool Creation
 
 Jasper must be capable of extending its own capabilities.
 

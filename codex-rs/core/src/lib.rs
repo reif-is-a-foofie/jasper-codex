@@ -41,6 +41,7 @@ mod file_watcher;
 mod flags;
 pub mod git_info;
 pub mod instructions;
+pub mod jasper_memory;
 pub mod landlock;
 pub mod mcp;
 mod mcp_connection_manager;
