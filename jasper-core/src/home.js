@@ -43,6 +43,13 @@ export function defaultIdentityConfigPath(options = {}) {
   return path.join(ensureJasperHomeLayout(options).configDir, "identity.yaml");
 }
 
+export function defaultManifestoConfigPath(options = {}) {
+  return path.join(
+    ensureJasperHomeLayout(options).configDir,
+    "companion-manifesto.yaml",
+  );
+}
+
 export function defaultRuntimeConfigPath(options = {}) {
   return path.join(ensureJasperHomeLayout(options).configDir, "runtime.json");
 }

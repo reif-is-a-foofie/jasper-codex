@@ -3,8 +3,10 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { bundledIdentityPath } from "./identity.js";
 import { defaultIdentityConfigPath } from "./home.js";
+import { defaultManifestoConfigPath } from "./home.js";
 import { defaultRuntimeConfigPath } from "./home.js";
 import { ensureJasperHomeLayout } from "./home.js";
+import { bundledManifestoPath } from "./manifesto.js";
 import { createQdrantMemoryIndex } from "../../jasper-memory/src/qdrant.js";
 import { DEFAULT_QDRANT_COLLECTION_NAME } from "../../jasper-memory/src/qdrant.js";
 import { DEFAULT_QDRANT_DISTANCE } from "../../jasper-memory/src/qdrant.js";
@@ -208,7 +210,9 @@ export function readRuntimeConfig(options = {}) {
 export async function setupJasper(options = {}) {
   const layout = ensureJasperHomeLayout({ jasperHome: options.jasperHome });
   const identityPath = defaultIdentityConfigPath({ jasperHome: layout.root });
+  const manifestoPath = defaultManifestoConfigPath({ jasperHome: layout.root });
   copyFileIfMissing(bundledIdentityPath(), identityPath);
+  copyFileIfMissing(bundledManifestoPath(), manifestoPath);
 
   const qdrant = await resolveQdrantConfig(layout, options);
   const qdrantCollection =
@@ -235,6 +239,7 @@ export async function setupJasper(options = {}) {
     generatedAt: new Date().toISOString(),
     jasperHome: layout.root,
     identityPath,
+    manifestoPath,
     memoryRoot: layout.memoryDir,
     services: {
       qdrant: qdrantCollection
@@ -268,6 +273,7 @@ export async function setupJasper(options = {}) {
 export async function getJasperSetupStatus(options = {}) {
   const layout = ensureJasperHomeLayout({ jasperHome: options.jasperHome });
   const identityPath = defaultIdentityConfigPath({ jasperHome: layout.root });
+  const manifestoPath = defaultManifestoConfigPath({ jasperHome: layout.root });
   const runtimeConfigPath = defaultRuntimeConfigPath({
     jasperHome: layout.root,
   });
@@ -315,6 +321,8 @@ export async function getJasperSetupStatus(options = {}) {
     jasperHome: layout.root,
     identityPath,
     identityExists: fs.existsSync(identityPath),
+    manifestoPath,
+    manifestoExists: fs.existsSync(manifestoPath),
     runtimeConfigPath,
     runtimeConfigExists: fs.existsSync(runtimeConfigPath),
     memoryRoot: layout.memoryDir,

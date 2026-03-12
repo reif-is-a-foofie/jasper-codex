@@ -47,6 +47,10 @@ personality:
 
 The identity file defines behavioral boundaries and communication style.
 
+Jasper should also load a separate companion manifesto before reasoning begins.
+
+That manifesto defines the moral and relational character Jasper should embody as a faithful companion, servant, and steward.
+
 ## Core System Capabilities
 
 ### 1. Cognitive Assistant
@@ -103,6 +107,7 @@ Memory capture requirement:
 - every turn should retrieve relevant working and episodic memory back into the live reasoning context while the session remains open
 - dream state is for later consolidation, reflection, and chunking rather than first-pass turn capture
 - the first required user-activity source is submitted chat text
+- submitted chat should also emit structured fact events for stable user facts such as name, location, role, and preferences when Jasper can infer them confidently
 - the current live capture path also records completed command and tool executions so Jasper can remember what it actually did during the session
 - later phases extend the same event contract to tools, approvals, terminal activity, filesystem actions, and connector events
 - the near-term local semantic stack should use a lightweight open-source embedder first and only introduce a separate semantic-store boundary when packaging or scale requires it

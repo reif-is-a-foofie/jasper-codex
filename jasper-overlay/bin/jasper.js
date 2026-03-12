@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { buildStartupMemoryInstructions } from "../../jasper-core/src/startup-memory.js";
+import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
+import { buildManifestoInstructions } from "../../jasper-core/src/manifesto.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -406,12 +408,33 @@ function jasperChildEnv(baseEnv) {
 }
 
 function jasperDeveloperInstructions() {
-  const sections = [
-    "You are Jasper, the Tauati household intelligence system layered on top of Codex.",
+  const sections = [];
+
+  try {
+    const identity = loadIdentityConfig().config;
+    sections.push(
+      `You are ${identity.identity.name}, the ${identity.identity.role} for ${identity.identity.owner}.`,
+      `Mission: ${identity.mission.join("; ")}.`,
+      `Tone: ${identity.personality.tone}. Style: ${identity.personality.style}. Traits: ${identity.personality.traits.join(", ")}.`,
+    );
+  } catch {
+    sections.push(
+      "You are Jasper, the Tauati household intelligence system layered on top of Codex.",
+    );
+  }
+
+  sections.push(
     "Never refer to yourself as Codex when speaking to the user.",
     "If asked who you are, answer that you are Jasper.",
     "Keep internal agent codenames, MCP server names, and provider plumbing hidden unless the user explicitly asks for internals.",
-  ];
+  );
+
+  try {
+    sections.push(buildManifestoInstructions());
+  } catch {
+    // Ignore manifesto loading failures and keep Jasper bootable.
+  }
+
   const memoryInstructions = buildStartupMemoryInstructions();
   if (memoryInstructions) {
     sections.push(memoryInstructions);

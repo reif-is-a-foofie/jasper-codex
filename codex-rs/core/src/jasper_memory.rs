@@ -7,10 +7,12 @@ use fastembed::TextEmbedding;
 use fastembed::TokenizerFiles;
 use fastembed::UserDefinedEmbeddingModel;
 use once_cell::sync::Lazy;
+use regex_lite::Regex;
 use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
@@ -42,6 +44,29 @@ const FASTEMBED_REQUIRED_FILES: &[&str] = &[
 
 static FASTEMBED_MODELS: Lazy<Mutex<HashMap<PathBuf, SharedFastembedModel>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+static MY_NAME_IS_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\bmy name is\s+([A-Za-z][A-Za-z' -]{0,63})").expect("regex"));
+static CALL_ME_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\bcall me\s+([A-Za-z][A-Za-z' -]{0,63})").expect("regex"));
+static I_LIVE_IN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\bi live in\s+([A-Za-z0-9][A-Za-z0-9,' -]{1,95})").expect("regex")
+});
+static I_WORK_AS_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\bi work as\s+(?:a|an)?\s*([A-Za-z0-9][A-Za-z0-9' -]{1,95})").expect("regex")
+});
+static I_AM_ROLE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\b(?:i am|i'm|im)\s+(?:a|an)\s+([A-Za-z0-9][A-Za-z0-9' -]{1,95})")
+        .expect("regex")
+});
+static I_PREFER_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\bi prefer\s+([A-Za-z0-9][A-Za-z0-9,' -]{1,120})").expect("regex")
+});
+static KEEP_STYLE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"(?i)\b(?:please\s+)?keep\s+(?:it\s+|the\s+responses?\s+|responses?\s+)?(concise|brief|short|detailed|direct|simple)",
+    )
+    .expect("regex")
+});
 
 #[derive(Serialize)]
 struct SessionRecord {
@@ -106,6 +131,21 @@ struct ExecCommandPayload {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ExtractedFactPayload {
+    thread_id: String,
+    turn_id: String,
+    client_name: Option<String>,
+    subject: String,
+    category: String,
+    attribute: String,
+    value: String,
+    normalized_value: String,
+    summary: String,
+    source_text: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct EventRecord<T: Serialize> {
     schema_version: u32,
     id: String,
@@ -163,6 +203,15 @@ struct InputCounts {
     local_image_count: usize,
     mention_count: usize,
     skill_count: usize,
+}
+
+struct ExtractedFact {
+    category: &'static str,
+    attribute: &'static str,
+    value: String,
+    normalized_value: String,
+    summary: String,
+    source_text: String,
 }
 
 type SharedFastembedModel = Arc<Mutex<TextEmbedding>>;
@@ -325,7 +374,8 @@ fn record_submitted_turn_to_home(
             char_count: text.chars().count(),
         },
     };
-    append_event_with_embedding(jasper_home, &event, timestamp)
+    append_event_with_embedding(jasper_home, &event, timestamp)?;
+    record_extracted_facts_to_home(jasper_home, thread_id, turn_id, client_name, &text)
 }
 
 pub fn build_relevant_memory_context(
@@ -478,6 +528,49 @@ fn record_exec_command_to_home(
     append_event_with_embedding(jasper_home, &event, timestamp)
 }
 
+fn record_extracted_facts_to_home(
+    jasper_home: &Path,
+    thread_id: &str,
+    turn_id: &str,
+    client_name: Option<&str>,
+    text: &str,
+) -> std::io::Result<()> {
+    for fact in extract_user_facts(text) {
+        let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let event = EventRecord {
+            schema_version: 1,
+            id: format!("evt_{}", Uuid::now_v7()),
+            ts: timestamp.clone(),
+            r#type: "user.fact.extracted".to_string(),
+            source: "jasper-facts".to_string(),
+            tags: vec![
+                "user".to_string(),
+                "fact".to_string(),
+                "structured".to_string(),
+                fact.category.to_string(),
+            ],
+            session: SessionRecord {
+                id: thread_id.to_string(),
+            },
+            payload: ExtractedFactPayload {
+                thread_id: thread_id.to_string(),
+                turn_id: turn_id.to_string(),
+                client_name: client_name.map(ToOwned::to_owned),
+                subject: "user".to_string(),
+                category: fact.category.to_string(),
+                attribute: fact.attribute.to_string(),
+                value: fact.value,
+                normalized_value: fact.normalized_value,
+                summary: fact.summary,
+                source_text: fact.source_text,
+            },
+        };
+        append_event_with_embedding(jasper_home, &event, timestamp)?;
+    }
+
+    Ok(())
+}
+
 fn append_event_with_embedding<T: Serialize>(
     jasper_home: &Path,
     event: &EventRecord<T>,
@@ -572,7 +665,9 @@ fn build_relevant_memory_context_from_home(
             }
 
             let mut score = similarity;
-            if event.event_type == "conversation.turn.completed" {
+            if event.event_type == "user.fact.extracted" {
+                score += 0.3;
+            } else if event.event_type == "conversation.turn.completed" {
                 score += 0.15;
             }
             if shares_query_token(event, &query_text) {
@@ -853,6 +948,199 @@ fn deterministic_embed_text(value: &str, dimension: usize) -> Vec<f64> {
     normalize_vector(vector)
 }
 
+fn extract_user_facts(text: &str) -> Vec<ExtractedFact> {
+    let mut facts = Vec::new();
+    let mut seen = HashSet::new();
+
+    push_regex_fact(
+        &mut facts,
+        &mut seen,
+        &MY_NAME_IS_RE,
+        text,
+        "identity",
+        "full_name",
+        |value| format!("User's name is {value}."),
+        is_plausible_name,
+    );
+    push_regex_fact(
+        &mut facts,
+        &mut seen,
+        &CALL_ME_RE,
+        text,
+        "identity",
+        "preferred_name",
+        |value| format!("User prefers to be called {value}."),
+        is_plausible_name,
+    );
+    push_regex_fact(
+        &mut facts,
+        &mut seen,
+        &I_LIVE_IN_RE,
+        text,
+        "location",
+        "home_location",
+        |value| format!("User lives in {value}."),
+        is_plausible_location,
+    );
+    push_regex_fact(
+        &mut facts,
+        &mut seen,
+        &I_WORK_AS_RE,
+        text,
+        "role",
+        "occupation",
+        |value| format!("User works as {value}."),
+        is_plausible_role,
+    );
+    push_regex_fact(
+        &mut facts,
+        &mut seen,
+        &I_AM_ROLE_RE,
+        text,
+        "role",
+        "occupation",
+        |value| format!("User is a {value}."),
+        is_plausible_role,
+    );
+    push_regex_fact(
+        &mut facts,
+        &mut seen,
+        &I_PREFER_RE,
+        text,
+        "preference",
+        "general_preference",
+        |value| format!("User prefers {value}."),
+        is_plausible_preference,
+    );
+    push_regex_fact(
+        &mut facts,
+        &mut seen,
+        &KEEP_STYLE_RE,
+        text,
+        "preference",
+        "communication_style",
+        |value| format!("User prefers {value} responses."),
+        is_plausible_preference,
+    );
+
+    facts
+}
+
+fn push_regex_fact(
+    facts: &mut Vec<ExtractedFact>,
+    seen: &mut HashSet<String>,
+    regex: &Regex,
+    text: &str,
+    category: &'static str,
+    attribute: &'static str,
+    summary_builder: impl Fn(&str) -> String,
+    validator: impl Fn(&str) -> bool,
+) {
+    for captures in regex.captures_iter(text) {
+        let Some(raw_value) = captures.get(1).map(|capture| capture.as_str()) else {
+            continue;
+        };
+        let value = clean_fact_value(raw_value);
+        if !validator(&value) {
+            continue;
+        }
+        let normalized_value = normalize_fact_value(&value);
+        if normalized_value.is_empty() {
+            continue;
+        }
+
+        let key = format!("{category}:{attribute}:{normalized_value}");
+        if !seen.insert(key) {
+            continue;
+        }
+
+        facts.push(ExtractedFact {
+            category,
+            attribute,
+            summary: summary_builder(&value),
+            source_text: captures
+                .get(0)
+                .map(|capture| capture.as_str().trim().to_string())
+                .unwrap_or_else(|| value.clone()),
+            normalized_value,
+            value,
+        });
+    }
+}
+
+fn clean_fact_value(raw: &str) -> String {
+    let mut value = raw
+        .trim()
+        .trim_matches(|ch: char| matches!(ch, '"' | '\'' | '.' | ',' | ';' | ':' | '!' | '?'))
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    loop {
+        let lower = value.to_ascii_lowercase();
+        let mut changed = false;
+        for suffix in [" fyi", " btw", " by the way", " thanks", " thank you"] {
+            if lower.ends_with(suffix) {
+                let new_len = value.len().saturating_sub(suffix.len());
+                value = value[..new_len]
+                    .trim()
+                    .trim_matches(|ch: char| matches!(ch, ',' | ';' | ':' | '!' | '?'))
+                    .to_string();
+                changed = true;
+                break;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    value
+}
+
+fn normalize_fact_value(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn is_plausible_name(value: &str) -> bool {
+    let word_count = value.split_whitespace().count();
+    !value.is_empty()
+        && word_count >= 1
+        && word_count <= 4
+        && !value.chars().any(|ch| ch.is_ascii_digit())
+}
+
+fn is_plausible_location(value: &str) -> bool {
+    let word_count = value.split_whitespace().count();
+    !value.is_empty()
+        && word_count >= 1
+        && word_count <= 8
+        && !value.to_ascii_lowercase().starts_with("a ")
+}
+
+fn is_plausible_role(value: &str) -> bool {
+    let normalized = normalize_fact_value(value);
+    let word_count = normalized.split_whitespace().count();
+    !normalized.is_empty()
+        && word_count >= 1
+        && word_count <= 8
+        && ![
+            "little", "bit", "lot", "few", "while", "fan", "member", "problem",
+        ]
+        .iter()
+        .any(|prefix| normalized.starts_with(&format!("{prefix} ")))
+}
+
+fn is_plausible_preference(value: &str) -> bool {
+    let word_count = value.split_whitespace().count();
+    !value.is_empty() && word_count <= 12
+}
+
 fn embedding_similarity(
     query_embeddings: &[QueryEmbedding],
     embedding: &StoredEmbeddingRecord,
@@ -974,6 +1262,16 @@ fn format_memory_line(event: &StoredEventRecord) -> Option<String> {
                     truncate_text(value, DEFAULT_MEMORY_CONTEXT_CHAR_LIMIT)
                 )
             }),
+        "user.fact.extracted" => event
+            .payload
+            .get("summary")
+            .and_then(|value| value.as_str())
+            .map(|value| {
+                format!(
+                    "- {date}: {}",
+                    truncate_text(value, DEFAULT_MEMORY_CONTEXT_CHAR_LIMIT)
+                )
+            }),
         "exec.command.completed" => {
             let command = event
                 .payload
@@ -1091,8 +1389,14 @@ mod tests {
         let event_path = jasper_home
             .path()
             .join("data/memory/data/events/events.jsonl");
-        let event_line = std::fs::read_to_string(&event_path)?;
-        let event: JsonValue = serde_json::from_str(event_line.trim())?;
+        let events = std::fs::read_to_string(&event_path)?
+            .lines()
+            .map(serde_json::from_str::<JsonValue>)
+            .collect::<Result<Vec<_>, _>>()?;
+        let event = events
+            .iter()
+            .find(|event| event["type"] == "user.chat.submitted")
+            .ok_or_else(|| anyhow::anyhow!("missing user chat event"))?;
         assert_eq!(event["type"], "user.chat.submitted");
         assert_eq!(event["source"], "jasper-chat");
         assert_eq!(event["session"]["id"], "thread_123");
@@ -1106,8 +1410,14 @@ mod tests {
         let embedding_path = jasper_home
             .path()
             .join("data/memory/data/embeddings/events.jsonl");
-        let embedding_line = std::fs::read_to_string(&embedding_path)?;
-        let embedding: JsonValue = serde_json::from_str(embedding_line.trim())?;
+        let embeddings = std::fs::read_to_string(&embedding_path)?
+            .lines()
+            .map(serde_json::from_str::<JsonValue>)
+            .collect::<Result<Vec<_>, _>>()?;
+        let embedding = embeddings
+            .iter()
+            .find(|embedding| embedding["eventId"] == event["id"])
+            .ok_or_else(|| anyhow::anyhow!("missing user chat embedding"))?;
         assert_eq!(embedding["eventId"], event["id"]);
         assert_eq!(embedding["engine"], DETERMINISTIC_EMBEDDING_ENGINE);
         assert_eq!(embedding["dimension"], 64);
@@ -1134,6 +1444,50 @@ mod tests {
             .path()
             .join("data/memory/data/events/events.jsonl");
         assert!(!event_path.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn record_submitted_turn_to_home_extracts_structured_facts() -> Result<()> {
+        let jasper_home = TempDir::new()?;
+
+        record_submitted_turn_to_home(
+            jasper_home.path(),
+            "thread_fact",
+            "turn_fact",
+            Some("jasper-tui"),
+            &[CoreUserInput::Text {
+                text: "Call me Reif. I live in Ozark, Missouri fyi. Please keep it concise."
+                    .to_string(),
+                text_elements: vec![],
+            }],
+        )?;
+
+        let events = std::fs::read_to_string(
+            jasper_home
+                .path()
+                .join("data/memory/data/events/events.jsonl"),
+        )?
+        .lines()
+        .map(serde_json::from_str::<JsonValue>)
+        .collect::<Result<Vec<_>, _>>()?;
+
+        let facts = events
+            .iter()
+            .filter(|event| event["type"] == "user.fact.extracted")
+            .collect::<Vec<_>>();
+        assert!(!facts.is_empty(), "expected at least one extracted fact");
+        assert!(facts.iter().any(|event| {
+            event["payload"]["attribute"] == "preferred_name" && event["payload"]["value"] == "Reif"
+        }));
+        assert!(facts.iter().any(|event| {
+            event["payload"]["attribute"] == "home_location"
+                && event["payload"]["value"] == "Ozark, Missouri"
+        }));
+        assert!(facts.iter().any(|event| {
+            event["payload"]["attribute"] == "communication_style"
+                && event["payload"]["value"] == "concise"
+        }));
         Ok(())
     }
 
@@ -1271,6 +1625,32 @@ mod tests {
 
         assert!(context.contains("Ozark, Missouri"));
         assert!(context.contains("Jasper responded"));
+        Ok(())
+    }
+
+    #[test]
+    fn build_relevant_memory_context_prefers_structured_fact_summary() -> Result<()> {
+        let jasper_home = TempDir::new()?;
+
+        record_submitted_turn_to_home(
+            jasper_home.path(),
+            "thread_facts",
+            "turn_001",
+            Some("jasper-tui"),
+            &[CoreUserInput::Text {
+                text: "I live in Ozark, Missouri.".to_string(),
+                text_elements: vec![],
+            }],
+        )?;
+
+        let context = build_relevant_memory_context_from_home(
+            jasper_home.path(),
+            &["Where do I live?".to_string()],
+            Some("turn_002"),
+        )
+        .ok_or_else(|| anyhow::anyhow!("missing relevant memory context"))?;
+
+        assert!(context.contains("User lives in Ozark, Missouri."));
         Ok(())
     }
 
