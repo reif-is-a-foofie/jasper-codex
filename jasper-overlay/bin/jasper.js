@@ -198,7 +198,7 @@ function findCommandOnPath(commandName) {
   return null;
 }
 
-function resolveRustupCargoCommand() {
+function resolveRustToolchain() {
   const targetTriple = resolveTargetTriple();
   const toolchainCargoCandidates = [
     process.env.JASPER_CARGO_BIN,
@@ -234,14 +234,27 @@ function resolveRustupCargoCommand() {
   if (toolchainCargoPath) {
     const toolchainBinDir = path.dirname(toolchainCargoPath);
     return {
-      command: toolchainCargoPath,
-      args: [],
+      cargoPath: toolchainCargoPath,
+      binDir: toolchainBinDir,
       env: {
         PATH: prependPath([toolchainBinDir], process.env.PATH),
         RUSTC:
           process.env.JASPER_RUSTC_BIN ||
           path.join(toolchainBinDir, process.platform === "win32" ? "rustc.exe" : "rustc"),
       },
+    };
+  }
+
+  return null;
+}
+
+function resolveRustupCargoCommand() {
+  const toolchain = resolveRustToolchain();
+  if (toolchain) {
+    return {
+      command: toolchain.cargoPath,
+      args: [],
+      env: toolchain.env,
     };
   }
 
@@ -373,6 +386,7 @@ function jasperChildEnv(baseEnv) {
   const env = { ...baseEnv };
   const modelDir = resolveSemanticModelDir();
   const runtimeLibrary = resolveSemanticRuntimeLibrary();
+  const rustToolchain = isDevelopmentCheckout ? resolveRustToolchain() : null;
 
   if (modelDir) {
     env.JASPER_SEMANTIC_MODEL_DIR = modelDir;
@@ -381,6 +395,11 @@ function jasperChildEnv(baseEnv) {
   if (runtimeLibrary) {
     env.ORT_DYLIB_PATH = runtimeLibrary;
     env.JASPER_ORT_DYLIB_PATH = runtimeLibrary;
+  }
+
+  if (rustToolchain) {
+    env.PATH = rustToolchain.env.PATH;
+    env.RUSTC = rustToolchain.env.RUSTC;
   }
 
   return env;

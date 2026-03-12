@@ -204,7 +204,7 @@ pub(crate) async fn execute_user_shell_command(
                 .send_event(
                     turn_context.as_ref(),
                     EventMsg::ExecCommandEnd(ExecCommandEndEvent {
-                        call_id,
+                        call_id: call_id.clone(),
                         process_id: None,
                         turn_id: turn_context.sub_id.clone(),
                         command: display_command.clone(),
@@ -217,13 +217,30 @@ pub(crate) async fn execute_user_shell_command(
                         aggregated_output: aborted_message.clone(),
                         exit_code: -1,
                         duration: Duration::ZERO,
-                        formatted_output: aborted_message,
+                        formatted_output: aborted_message.clone(),
                         status: ExecCommandStatus::Failed,
                     }),
                 )
                 .await;
+            record_user_shell_exec_memory(
+                &session,
+                turn_context.as_ref(),
+                &call_id,
+                &display_command,
+                &cwd,
+                -1,
+                Duration::ZERO,
+                &aborted_message,
+                ExecCommandStatus::Failed,
+            );
         }
         Ok(Ok(output)) => {
+            let formatted_output = format_exec_output_str(&output, turn_context.truncation_policy);
+            let status = if output.exit_code == 0 {
+                ExecCommandStatus::Completed
+            } else {
+                ExecCommandStatus::Failed
+            };
             session
                 .send_event(
                     turn_context.as_ref(),
@@ -241,18 +258,22 @@ pub(crate) async fn execute_user_shell_command(
                         aggregated_output: output.aggregated_output.text.clone(),
                         exit_code: output.exit_code,
                         duration: output.duration,
-                        formatted_output: format_exec_output_str(
-                            &output,
-                            turn_context.truncation_policy,
-                        ),
-                        status: if output.exit_code == 0 {
-                            ExecCommandStatus::Completed
-                        } else {
-                            ExecCommandStatus::Failed
-                        },
+                        formatted_output: formatted_output.clone(),
+                        status: status.clone(),
                     }),
                 )
                 .await;
+            record_user_shell_exec_memory(
+                &session,
+                turn_context.as_ref(),
+                &call_id,
+                &display_command,
+                &cwd,
+                output.exit_code,
+                output.duration,
+                &formatted_output,
+                status,
+            );
 
             persist_user_shell_output(&session, turn_context.as_ref(), &raw_command, &output, mode)
                 .await;
@@ -268,16 +289,18 @@ pub(crate) async fn execute_user_shell_command(
                 duration: Duration::ZERO,
                 timed_out: false,
             };
+            let formatted_output =
+                format_exec_output_str(&exec_output, turn_context.truncation_policy);
             session
                 .send_event(
                     turn_context.as_ref(),
                     EventMsg::ExecCommandEnd(ExecCommandEndEvent {
-                        call_id,
+                        call_id: call_id.clone(),
                         process_id: None,
                         turn_id: turn_context.sub_id.clone(),
-                        command: display_command,
-                        cwd,
-                        parsed_cmd,
+                        command: display_command.clone(),
+                        cwd: cwd.clone(),
+                        parsed_cmd: parsed_cmd.clone(),
                         source: ExecCommandSource::UserShell,
                         interaction_input: None,
                         stdout: exec_output.stdout.text.clone(),
@@ -285,14 +308,22 @@ pub(crate) async fn execute_user_shell_command(
                         aggregated_output: exec_output.aggregated_output.text.clone(),
                         exit_code: exec_output.exit_code,
                         duration: exec_output.duration,
-                        formatted_output: format_exec_output_str(
-                            &exec_output,
-                            turn_context.truncation_policy,
-                        ),
+                        formatted_output: formatted_output.clone(),
                         status: ExecCommandStatus::Failed,
                     }),
                 )
                 .await;
+            record_user_shell_exec_memory(
+                &session,
+                turn_context.as_ref(),
+                &call_id,
+                &display_command,
+                &cwd,
+                exec_output.exit_code,
+                exec_output.duration,
+                &formatted_output,
+                ExecCommandStatus::Failed,
+            );
             persist_user_shell_output(
                 &session,
                 turn_context.as_ref(),
@@ -302,6 +333,39 @@ pub(crate) async fn execute_user_shell_command(
             )
             .await;
         }
+    }
+}
+
+fn record_user_shell_exec_memory(
+    session: &Session,
+    turn_context: &TurnContext,
+    call_id: &str,
+    command: &[String],
+    cwd: &std::path::Path,
+    exit_code: i32,
+    duration: Duration,
+    formatted_output: &str,
+    status: ExecCommandStatus,
+) {
+    if let Err(err) = crate::jasper_memory::maybe_record_exec_command(
+        &session.conversation_id.to_string(),
+        &turn_context.sub_id,
+        call_id,
+        None,
+        turn_context.app_server_client_name.as_deref(),
+        command,
+        cwd,
+        ExecCommandSource::UserShell,
+        exit_code,
+        duration,
+        formatted_output,
+        status,
+    ) {
+        tracing::warn!(
+            "failed to record Jasper user-shell memory for thread {}: {}",
+            session.conversation_id,
+            err
+        );
     }
 }
 

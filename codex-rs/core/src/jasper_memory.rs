@@ -1,3 +1,5 @@
+use codex_protocol::protocol::ExecCommandSource;
+use codex_protocol::protocol::ExecCommandStatus;
 use codex_protocol::user_input::UserInput as CoreUserInput;
 use fastembed::InitOptionsUserDefined;
 use fastembed::Pooling;
@@ -15,6 +17,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -23,6 +26,7 @@ const JASPER_CAPTURE_USER_ACTIVITY_ENV_VAR: &str = "JASPER_CAPTURE_USER_ACTIVITY
 const JASPER_HOME_ENV_VAR: &str = "JASPER_HOME";
 const JASPER_SEMANTIC_MODEL_DIR_ENV_VAR: &str = "JASPER_SEMANTIC_MODEL_DIR";
 const DEFAULT_EMBEDDING_DIMENSION: usize = 64;
+const DEFAULT_EXEC_OUTPUT_EXCERPT_CHAR_LIMIT: usize = 4_000;
 const DEFAULT_MEMORY_CONTEXT_LIMIT: usize = 3;
 const DEFAULT_MEMORY_CONTEXT_CHAR_LIMIT: usize = 240;
 const DETERMINISTIC_EMBEDDING_ENGINE: &str = "token-hash-v1";
@@ -79,6 +83,25 @@ struct CompletedTurnPayload {
     input_char_count: usize,
     last_assistant_message: Option<String>,
     assistant_char_count: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExecCommandPayload {
+    thread_id: String,
+    turn_id: String,
+    call_id: String,
+    process_id: Option<String>,
+    client_name: Option<String>,
+    command: Vec<String>,
+    command_line: String,
+    cwd: String,
+    source: String,
+    status: String,
+    exit_code: i32,
+    duration_ms: u64,
+    output_excerpt: Option<String>,
+    output_char_count: usize,
 }
 
 #[derive(Serialize)]
@@ -200,6 +223,45 @@ pub fn maybe_record_completed_turn(
         client_name,
         input_messages,
         last_assistant_message,
+    )
+}
+
+pub fn maybe_record_exec_command(
+    thread_id: &str,
+    turn_id: &str,
+    call_id: &str,
+    process_id: Option<&str>,
+    client_name: Option<&str>,
+    command: &[String],
+    cwd: &Path,
+    source: ExecCommandSource,
+    exit_code: i32,
+    duration: Duration,
+    formatted_output: &str,
+    status: ExecCommandStatus,
+) -> std::io::Result<()> {
+    if !is_capture_enabled() {
+        return Ok(());
+    }
+
+    let Some(jasper_home) = default_jasper_home() else {
+        return Ok(());
+    };
+
+    record_exec_command_to_home(
+        jasper_home.as_path(),
+        thread_id,
+        turn_id,
+        call_id,
+        process_id,
+        client_name,
+        command,
+        cwd,
+        source,
+        exit_code,
+        duration,
+        formatted_output,
+        status,
     )
 }
 
@@ -330,6 +392,86 @@ fn record_completed_turn_to_home(
                 .map(|message| message.chars().count())
                 .unwrap_or(0),
             last_assistant_message: assistant_message,
+        },
+    };
+
+    append_event_with_embedding(jasper_home, &event, timestamp)
+}
+
+fn record_exec_command_to_home(
+    jasper_home: &Path,
+    thread_id: &str,
+    turn_id: &str,
+    call_id: &str,
+    process_id: Option<&str>,
+    client_name: Option<&str>,
+    command: &[String],
+    cwd: &Path,
+    source: ExecCommandSource,
+    exit_code: i32,
+    duration: Duration,
+    formatted_output: &str,
+    status: ExecCommandStatus,
+) -> std::io::Result<()> {
+    if command.is_empty() {
+        return Ok(());
+    }
+
+    let command_line = command.join(" ");
+    let normalized_output = formatted_output.trim();
+    let output_excerpt = if normalized_output.is_empty() {
+        None
+    } else {
+        Some(truncate_text(
+            normalized_output,
+            DEFAULT_EXEC_OUTPUT_EXCERPT_CHAR_LIMIT,
+        ))
+    };
+    let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let mut tags = vec![
+        "exec".to_string(),
+        "command".to_string(),
+        "activity".to_string(),
+        "shell".to_string(),
+    ];
+    match source {
+        ExecCommandSource::UserShell => {
+            tags.push("user".to_string());
+            tags.push("terminal".to_string());
+        }
+        ExecCommandSource::Agent
+        | ExecCommandSource::UnifiedExecStartup
+        | ExecCommandSource::UnifiedExecInteraction => {
+            tags.push("assistant".to_string());
+            tags.push("tool".to_string());
+        }
+    }
+
+    let event = EventRecord {
+        schema_version: 1,
+        id: format!("evt_{}", Uuid::now_v7()),
+        ts: timestamp.clone(),
+        r#type: "exec.command.completed".to_string(),
+        source: "jasper-exec".to_string(),
+        tags,
+        session: SessionRecord {
+            id: thread_id.to_string(),
+        },
+        payload: ExecCommandPayload {
+            thread_id: thread_id.to_string(),
+            turn_id: turn_id.to_string(),
+            call_id: call_id.to_string(),
+            process_id: process_id.map(ToOwned::to_owned),
+            client_name: client_name.map(ToOwned::to_owned),
+            command: command.to_vec(),
+            command_line,
+            cwd: cwd.display().to_string(),
+            source: exec_command_source_name(source).to_string(),
+            status: exec_command_status_name(status).to_string(),
+            exit_code,
+            duration_ms: duration.as_millis().min(u128::from(u64::MAX)) as u64,
+            output_excerpt,
+            output_char_count: normalized_output.chars().count(),
         },
     };
 
@@ -832,7 +974,64 @@ fn format_memory_line(event: &StoredEventRecord) -> Option<String> {
                     truncate_text(value, DEFAULT_MEMORY_CONTEXT_CHAR_LIMIT)
                 )
             }),
+        "exec.command.completed" => {
+            let command = event
+                .payload
+                .get("commandLine")
+                .and_then(|value| value.as_str())?;
+            let source = event
+                .payload
+                .get("source")
+                .and_then(|value| value.as_str())
+                .unwrap_or("agent");
+            let status = event
+                .payload
+                .get("status")
+                .and_then(|value| value.as_str())
+                .unwrap_or("completed");
+            let exit_code = event
+                .payload
+                .get("exitCode")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0);
+            let actor = if source == "user_shell" {
+                "user ran"
+            } else {
+                "Jasper ran"
+            };
+            let output = event
+                .payload
+                .get("outputExcerpt")
+                .and_then(|value| value.as_str())
+                .map(|value| truncate_text(value, DEFAULT_MEMORY_CONTEXT_CHAR_LIMIT));
+
+            let mut summary = format!(
+                "- {date}: {actor} `{}` ({status}, exit {exit_code})",
+                truncate_text(command, DEFAULT_MEMORY_CONTEXT_CHAR_LIMIT)
+            );
+            if let Some(output) = output {
+                summary.push_str(&format!(" => \"{output}\""));
+            }
+            Some(summary)
+        }
         _ => None,
+    }
+}
+
+fn exec_command_source_name(source: ExecCommandSource) -> &'static str {
+    match source {
+        ExecCommandSource::Agent => "agent",
+        ExecCommandSource::UserShell => "user_shell",
+        ExecCommandSource::UnifiedExecStartup => "unified_exec_startup",
+        ExecCommandSource::UnifiedExecInteraction => "unified_exec_interaction",
+    }
+}
+
+fn exec_command_status_name(status: ExecCommandStatus) -> &'static str {
+    match status {
+        ExecCommandStatus::Completed => "completed",
+        ExecCommandStatus::Failed => "failed",
+        ExecCommandStatus::Declined => "declined",
     }
 }
 
@@ -980,6 +1179,59 @@ mod tests {
             .lines()
             .last()
             .ok_or_else(|| anyhow::anyhow!("missing embedding line"))?;
+        let embedding: JsonValue = serde_json::from_str(last_embedding_line)?;
+        assert_eq!(embedding["eventId"], event["id"]);
+        assert_eq!(embedding["engine"], DETERMINISTIC_EMBEDDING_ENGINE);
+        assert_eq!(embedding["dimension"], 64);
+        Ok(())
+    }
+
+    #[test]
+    fn record_exec_command_to_home_writes_exec_event_and_embedding() -> Result<()> {
+        let jasper_home = TempDir::new()?;
+
+        record_exec_command_to_home(
+            jasper_home.path(),
+            "thread_exec",
+            "turn_exec",
+            "call_exec",
+            Some("proc_123"),
+            Some("jasper-tui"),
+            &["pwd".to_string()],
+            Path::new("/tmp/jasper-exec"),
+            ExecCommandSource::Agent,
+            0,
+            Duration::from_millis(12),
+            "/tmp/jasper-exec",
+            ExecCommandStatus::Completed,
+        )?;
+
+        let event_path = jasper_home
+            .path()
+            .join("data/memory/data/events/events.jsonl");
+        let lines = std::fs::read_to_string(&event_path)?;
+        let last_line = lines
+            .lines()
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("missing exec event line"))?;
+        let event: JsonValue = serde_json::from_str(last_line)?;
+        assert_eq!(event["type"], "exec.command.completed");
+        assert_eq!(event["source"], "jasper-exec");
+        assert_eq!(event["payload"]["turnId"], "turn_exec");
+        assert_eq!(event["payload"]["callId"], "call_exec");
+        assert_eq!(event["payload"]["commandLine"], "pwd");
+        assert_eq!(event["payload"]["status"], "completed");
+        assert_eq!(event["payload"]["exitCode"], 0);
+        assert_eq!(event["payload"]["outputExcerpt"], "/tmp/jasper-exec");
+
+        let embedding_path = jasper_home
+            .path()
+            .join("data/memory/data/embeddings/events.jsonl");
+        let embedding_lines = std::fs::read_to_string(&embedding_path)?;
+        let last_embedding_line = embedding_lines
+            .lines()
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("missing exec embedding line"))?;
         let embedding: JsonValue = serde_json::from_str(last_embedding_line)?;
         assert_eq!(embedding["eventId"], event["id"]);
         assert_eq!(embedding["engine"], DETERMINISTIC_EMBEDDING_ENGINE);

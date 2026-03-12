@@ -464,28 +464,63 @@ async fn emit_exec_end(
     exec_input: ExecCommandInput<'_>,
     exec_result: ExecCommandResult,
 ) {
+    let turn_id = ctx.turn.sub_id.clone();
+    let process_id = exec_input.process_id.map(str::to_owned);
+    let command = exec_input.command.to_vec();
+    let cwd = exec_input.cwd.to_path_buf();
+    let parsed_cmd = exec_input.parsed_cmd.to_vec();
+    let interaction_input = exec_input.interaction_input.map(str::to_owned);
+    let stdout = exec_result.stdout;
+    let stderr = exec_result.stderr;
+    let aggregated_output = exec_result.aggregated_output;
+    let exit_code = exec_result.exit_code;
+    let duration = exec_result.duration;
+    let formatted_output = exec_result.formatted_output;
+    let status = exec_result.status;
+
     ctx.session
         .send_event(
             ctx.turn,
             EventMsg::ExecCommandEnd(ExecCommandEndEvent {
                 call_id: ctx.call_id.to_string(),
-                process_id: exec_input.process_id.map(str::to_owned),
-                turn_id: ctx.turn.sub_id.clone(),
-                command: exec_input.command.to_vec(),
-                cwd: exec_input.cwd.to_path_buf(),
-                parsed_cmd: exec_input.parsed_cmd.to_vec(),
+                process_id: process_id.clone(),
+                turn_id: turn_id.clone(),
+                command: command.clone(),
+                cwd: cwd.clone(),
+                parsed_cmd,
                 source: exec_input.source,
-                interaction_input: exec_input.interaction_input.map(str::to_owned),
-                stdout: exec_result.stdout,
-                stderr: exec_result.stderr,
-                aggregated_output: exec_result.aggregated_output,
-                exit_code: exec_result.exit_code,
-                duration: exec_result.duration,
-                formatted_output: exec_result.formatted_output,
-                status: exec_result.status,
+                interaction_input,
+                stdout,
+                stderr,
+                aggregated_output,
+                exit_code,
+                duration,
+                formatted_output: formatted_output.clone(),
+                status: status.clone(),
             }),
         )
         .await;
+
+    if let Err(err) = crate::jasper_memory::maybe_record_exec_command(
+        &ctx.session.conversation_id.to_string(),
+        &turn_id,
+        ctx.call_id,
+        process_id.as_deref(),
+        ctx.turn.app_server_client_name.as_deref(),
+        &command,
+        &cwd,
+        exec_input.source,
+        exit_code,
+        duration,
+        &formatted_output,
+        status,
+    ) {
+        tracing::warn!(
+            "failed to record Jasper exec memory for thread {}: {}",
+            ctx.session.conversation_id,
+            err
+        );
+    }
 }
 
 async fn emit_patch_end(
