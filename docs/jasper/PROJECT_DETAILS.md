@@ -83,6 +83,12 @@ memory/
 
 Vector search enables retrieval of relevant past information.
 
+Memory capture requirement:
+
+- every explicit user action must be recorded as a raw event before any semantic materialization
+- the first required user-activity source is submitted chat text
+- later phases extend the same event contract to tools, approvals, terminal activity, filesystem actions, and connector events
+
 ### 3. Guardian System
 
 Jasper acts as a guardian of the user’s digital environment.
@@ -161,6 +167,7 @@ Jasper must observe the user’s environment.
 
 Sources:
 
+- chat submissions
 - email
 - filesystem
 - browser activity

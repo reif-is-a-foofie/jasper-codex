@@ -65,6 +65,7 @@ mod error_code;
 mod external_agent_config_api;
 mod filters;
 mod fuzzy_file_search;
+mod jasper_memory;
 mod message_processor;
 mod models;
 mod outgoing_message;

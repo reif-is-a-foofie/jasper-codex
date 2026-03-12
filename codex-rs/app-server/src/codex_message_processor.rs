@@ -5100,7 +5100,7 @@ impl CodexMessageProcessor {
             }
         };
         if let Err(error) =
-            Self::set_app_server_client_name(thread.as_ref(), app_server_client_name).await
+            Self::set_app_server_client_name(thread.as_ref(), app_server_client_name.clone()).await
         {
             self.outgoing.send_error(request_id, error).await;
             return;
@@ -5119,6 +5119,8 @@ impl CodexMessageProcessor {
             .into_iter()
             .map(V2UserInput::into_core)
             .collect();
+        let jasper_capture_items =
+            crate::jasper_memory::is_capture_enabled().then(|| mapped_items.clone());
 
         let has_any_overrides = params.cwd.is_some()
             || params.approval_policy.is_some()
@@ -5158,6 +5160,20 @@ impl CodexMessageProcessor {
 
         match turn_id {
             Ok(turn_id) => {
+                if let Some(items) = jasper_capture_items.as_ref()
+                    && let Err(err) = crate::jasper_memory::maybe_record_submitted_turn_text(
+                        &params.thread_id,
+                        &turn_id,
+                        app_server_client_name.as_deref(),
+                        items,
+                    )
+                {
+                    warn!(
+                        "failed to record Jasper chat activity for thread {}: {err}",
+                        params.thread_id
+                    );
+                }
+
                 let turn = Turn {
                     id: turn_id.clone(),
                     items: vec![],
