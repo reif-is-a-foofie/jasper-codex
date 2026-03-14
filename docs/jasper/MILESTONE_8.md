@@ -1,5 +1,9 @@
 # Jasper Milestone 8
 
+## Status
+
+Complete.
+
 ## Objective
 
 Make Jasper installable and usable by a new operator without relying on manual setup knowledge.

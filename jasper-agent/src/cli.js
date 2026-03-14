@@ -16,8 +16,9 @@ import { createJasperRuntime } from "./runtime.js";
 function printUsage() {
   process.stdout.write(`Usage:
   node jasper-agent/src/cli.js start [--identity PATH] [--interval-ms N] [--max-ticks N] [--memory-root PATH] [--tools-root PATH] [--watch-path PATH]
-  node jasper-agent/src/cli.js setup [--jasper-home PATH] [--skip-qdrant] [--qdrant-url URL] [--qdrant-container-name NAME] [--qdrant-image IMAGE]
+  node jasper-agent/src/cli.js setup [--jasper-home PATH] [--skip-qdrant] [--skip-auth] [--device-auth] [--qdrant-url URL] [--qdrant-container-name NAME] [--qdrant-image IMAGE]
   node jasper-agent/src/cli.js setup status [--jasper-home PATH]
+  node jasper-agent/src/cli.js doctor [--jasper-home PATH]
   node jasper-agent/src/cli.js identity [--identity PATH]
   node jasper-agent/src/cli.js memory recent [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js memory search QUERY [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
@@ -173,6 +174,14 @@ function parseArgs(argv) {
       options.skipQdrant = true;
       continue;
     }
+    if (arg === "--skip-auth") {
+      options.skipAuth = true;
+      continue;
+    }
+    if (arg === "--device-auth") {
+      options.deviceAuth = true;
+      continue;
+    }
     options.positionals.push(arg);
   }
 
@@ -231,9 +240,21 @@ async function main() {
       await setupJasper({
         jasperHome: options.jasperHome,
         skipQdrant: options.skipQdrant,
+        skipAuth: options.skipAuth,
+        deviceAuth: options.deviceAuth,
         qdrantUrl: options.qdrantUrl,
         qdrantContainerName: options.qdrantContainerName,
         qdrantImage: options.qdrantImage,
+      }),
+    );
+    return;
+  }
+
+  if (command === "doctor") {
+    printJson(
+      await getJasperSetupStatus({
+        jasperHome: options.jasperHome,
+        validateAuth: true,
       }),
     );
     return;

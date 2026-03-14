@@ -14,6 +14,7 @@ Current launcher behavior:
 
 - `node jasper-overlay/bin/jasper.js` launches Codex with Jasper branding enabled
 - `node jasper-overlay/bin/jasper.js setup` initializes Jasper home state and provisions Qdrant
+- `node jasper-overlay/bin/jasper.js doctor` reports Jasper setup, runtime, auth, and Qdrant health
 - `node jasper-overlay/bin/jasper.js identity` reads Jasper identity config
 - `node jasper-overlay/bin/jasper.js runtime` starts the standalone Jasper runtime scaffold
 - `node jasper-overlay/bin/jasper.js runtime --watch-path PATH` enables filesystem observation for a target path
@@ -53,13 +54,14 @@ Packaging:
 
 Installed package behavior:
 
-- `jasper setup` creates `~/.jasper/`, copies the default identity config, writes runtime config, and provisions Qdrant through Docker unless `--skip-qdrant` or `--qdrant-url` is used
+- `jasper setup` creates `~/.jasper/`, copies the default identity config, writes runtime config, validates existing OpenAI/Codex auth when possible, and provisions Qdrant through Docker unless `--skip-qdrant` or `--qdrant-url` is used
+- `jasper doctor` reports whether Jasper has a usable runtime, auth state, and local semantic-store configuration
 - raw events still land in `~/.jasper/data/memory` first; `jasper memory materialize` is the second-stage semantic pipe
 - Docker is the current developer fallback only. The shipped Jasper app should provision and manage local services internally.
 - `jasper` launches the bundled Codex binary when `vendor/` is present
 - `jasper identity`, `jasper memory`, `jasper dream`, and `jasper tools` work from the packaged Jasper JS modules without requiring a repo checkout
 - packaged Jasper should also carry its own local semantic-model and semantic-runtime assets once model-based embeddings replace the deterministic placeholder
-- OpenAI authentication and connector onboarding are not packaged as a guided flow yet; operators still need to complete those steps manually for now
+- first-pass OpenAI auth validation is now part of setup, but connector onboarding is still manual for now
 - in the live terminal chat, Jasper now auto-surfaces installed calendar and mailbox tools from normal household prompts and should send the user to `/apps` when a household connector is still missing
 
 Do not move Jasper behavior into `codex-rs/` or `codex-cli/` unless the core patch gate in `docs/jasper/FORK_STRATEGY.md` is satisfied.

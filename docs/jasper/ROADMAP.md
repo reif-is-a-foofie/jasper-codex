@@ -8,13 +8,13 @@ The roadmap is ordered by the shortest path to a reliable `2X` force multiplier 
 
 ## Default Execution Cursor
 
-If no newer direction is given, the default next build target is **Milestone 8: Guided Onboarding And Authentication**.
+If no newer direction is given, the default next build target is **Milestone 9: Consent-Driven Connector Operations**.
 
 Reason:
 
-- Jasper can already do meaningful work in the terminal
-- the next bottleneck is setup friction and operator onboarding
-- reducing that friction is the fastest path from prototype utility to daily reliability
+- Jasper can now get a new operator through setup, auth validation, and first-run health checks
+- the next bottleneck is turning consent-gated household systems into normal Jasper capabilities
+- connector access is now the shortest path from healthy terminal prototype to daily leverage
 
 ## Milestone Ladder
 
@@ -47,11 +47,11 @@ Reason:
    Outcome: outcome-oriented request routing, tool planning, after-turn intake, and self-extension queueing.
 
 8. **Milestone 8: Guided Onboarding And Authentication**  
-   Status: next.  
+   Status: complete.  
    Outcome: a new operator can install Jasper, authenticate, and reach a healthy first-run state without manual spelunking.
 
 9. **Milestone 9: Consent-Driven Connector Operations**  
-   Status: planned.  
+   Status: next.  
    Outcome: calendar, mail, and related household connectors become natural Jasper capabilities with explicit consent boundaries.
 
 10. **Milestone 10: Background Monitoring And Daily Digest**  

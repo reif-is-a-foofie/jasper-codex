@@ -15,26 +15,31 @@ jasper
 - creating the local Jasper home at `~/.jasper/` by default
 - copying the default identity configuration into the user's config directory
 - creating the local raw-memory directories
+- validating existing OpenAI/Codex auth or completing first-pass auth during setup when possible
 - provisioning a local semantic store without requiring the operator to install infrastructure manually in the packaged product
 - ensuring packaged Jasper dependencies are self-contained instead of assuming Rust, cargo, Docker, MCP servers, or model runtimes exist on the operator machine
 - writing a runtime configuration file that later Jasper commands can reuse
+- recording the resolved Codex runtime Jasper should use for launch and first-party web research
+- surfacing setup health through `jasper doctor`
 
 ## Current Scope
 
-This onboarding flow intentionally stops short of guided account setup.
+This onboarding flow now includes a first-pass guided auth check, but it still stops short of guided connector setup and app-managed infrastructure.
 
 Deferred items:
 
-- OpenAI credential entry and validation
 - connector consent flows
 - mailbox, calendar, and browser onboarding
 - remote hosted vector store provisioning
-- bundling or configuring the Codex runtime needed by Jasper's first-party web-research tool in packaged installs
+- richer operator auth choices inside setup beyond the current inline reuse of Codex login flows
+- bundling the Codex runtime Jasper needs for first-party web research in packaged installs without any developer fallback assumptions
 
-For now, operators still need to complete authentication and connector setup manually after `jasper setup`.
+Current onboarding behavior:
 
-Current terminal behavior before guided onboarding lands:
-
+- `jasper setup` now checks whether Codex/OpenAI auth is already present
+- if `OPENAI_API_KEY` is provided, setup can log Jasper in non-interactively through the existing Codex API-key flow
+- if setup is interactive and auth is still missing, it can inline the existing Codex login flow instead of forcing a separate command detour
+- `jasper doctor` reports setup, runtime, auth, and local semantic-store health with suggested follow-up steps
 - Jasper can already auto-surface installed calendar and mailbox tools from normal household prompts during chat
 - if the user asks for household app access and the connector is still missing, Jasper should direct them to `/apps` in the terminal UI
 
@@ -77,12 +82,12 @@ Supported setup modes:
 
 ## Near-Term Follow-Up
 
-The next onboarding milestone is not more packaging. It is guided authentication:
+The next onboarding work after first-pass auth is guided connector activation and healthier local infrastructure:
 
-1. validate OpenAI credentials after setup
-2. store a minimal operator config safely
-3. present connector consent steps one system at a time
-4. confirm Jasper can materialize raw memory into its provisioned local semantic store automatically
+1. present connector consent steps one system at a time
+2. store a minimal operator profile safely
+3. confirm Jasper can materialize raw memory into its provisioned local semantic store automatically
+4. make `jasper doctor` actionable for connector and semantic-store remediation, not just runtime/auth
 
 The packaging milestone after that is app-managed infrastructure:
 
@@ -90,4 +95,4 @@ The packaging milestone after that is app-managed infrastructure:
 2. start and stop that process from Jasper, not from Docker
 3. migrate the current developer fallback out of the default user path
 4. bundle the local embedding model and ONNX runtime artifacts inside the app so semantic recall works without first-run dependency installs
-5. bundle the Codex runtime Jasper uses for first-party web research, or write `JASPER_CODEX_EXECUTABLE` automatically during setup
+5. bundle the Codex runtime Jasper uses for first-party web research so packaged installs do not rely on a development checkout

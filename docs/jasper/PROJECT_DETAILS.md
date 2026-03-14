@@ -344,8 +344,8 @@ Packaging goals:
 - for packaged Jasper, provision and manage required local services internally instead of asking operators to install Docker, Homebrew packages, or database binaries themselves
 - do not require end users to install Rust, cargo, Docker, Homebrew packages, model runtimes, or MCP servers by hand
 - treat developer-facing setup shortcuts as temporary bootstraps, not the end-user product model
-- accept that early packaged releases will still require manual OpenAI authentication and connector setup until guided onboarding is implemented
-- document that guided credential onboarding is a future milestone, not a blocker for the current packaging work
+- accept that early packaged releases still require manual connector setup even though first-pass auth validation now exists in `jasper setup`
+- document connector onboarding and app-managed infrastructure as follow-on milestones, not blockers for the current terminal product
 
 ## Fork Strategy
 

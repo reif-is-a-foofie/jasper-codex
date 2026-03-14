@@ -8,6 +8,7 @@ import { buildStartupMemoryInstructions } from "../../jasper-core/src/startup-me
 import { buildStartupToolInstructions } from "../../jasper-core/src/startup-tools.js";
 import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
 import { buildManifestoInstructions } from "../../jasper-core/src/manifesto.js";
+import { readRuntimeConfig } from "../../jasper-core/src/setup.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -302,10 +303,52 @@ function resolvePackagedCodex() {
       env: extraPathEntries.length
         ? { PATH: prependPath(extraPathEntries, process.env.PATH) }
         : {},
+      source: "packaged",
     };
   }
 
   return null;
+}
+
+function baseCodexArgs(codex) {
+  const args = Array.isArray(codex?.args) ? codex.args : [];
+  if (codex?.source === "cargo_on_path" || codex?.source === "rustup_cargo") {
+    const separatorIndex = args.indexOf("--");
+    return separatorIndex === -1 ? args : args.slice(0, separatorIndex);
+  }
+
+  return args;
+}
+
+function launchArgsForStoredCodex(codex) {
+  const baseArgs = Array.isArray(codex?.args) ? codex.args : [];
+  if (codex?.source === "cargo_on_path" || codex?.source === "rustup_cargo") {
+    return [...baseArgs, "--", ...jasperCodexConfigArgs()];
+  }
+
+  return [...baseArgs, ...jasperCodexConfigArgs()];
+}
+
+function resolveRuntimeConfiguredCodex() {
+  const runtimeConfig = readRuntimeConfig();
+  const codex = runtimeConfig?.runtime?.codex;
+  if (!codex?.command) {
+    return null;
+  }
+
+  if (
+    (path.isAbsolute(codex.command) || codex.command.includes(path.sep)) &&
+    !fs.existsSync(codex.command)
+  ) {
+    return null;
+  }
+
+  return {
+    command: codex.command,
+    args: launchArgsForStoredCodex(codex),
+    env: codex.env && typeof codex.env === "object" ? codex.env : {},
+    source: codex.source || "runtime_config",
+  };
 }
 
 function printBanner() {
@@ -363,6 +406,7 @@ Commands:
   broker      Inspect Jasper capability routing
   dream       Inspect Jasper reflections
   setup       Prepare Jasper local runtime state
+  doctor      Check Jasper setup, runtime, and auth health
   help        Print this message
 
 Options:
@@ -404,6 +448,22 @@ function jasperChildEnv(baseEnv) {
   if (rustToolchain) {
     env.PATH = rustToolchain.env.PATH;
     env.RUSTC = rustToolchain.env.RUSTC;
+  }
+
+  return env;
+}
+
+function jasperSetupEnv(baseEnv) {
+  const env = jasperChildEnv(baseEnv);
+
+  try {
+    const codex = resolveCodexCommand();
+    env.JASPER_SETUP_CODEX_COMMAND = codex.command;
+    env.JASPER_SETUP_CODEX_ARGS_JSON = JSON.stringify(baseCodexArgs(codex));
+    env.JASPER_SETUP_CODEX_ENV_JSON = JSON.stringify(codex.env || {});
+    env.JASPER_SETUP_CODEX_SOURCE = codex.source || "launcher";
+  } catch {
+    // Leave setup health checks to report the missing runtime cleanly.
   }
 
   return env;
@@ -498,7 +558,13 @@ function resolveCodexCommand() {
       command: process.env.JASPER_CODEX_BIN,
       args: [],
       env: {},
+      source: "env",
     };
+  }
+
+  const runtimeConfiguredCodex = resolveRuntimeConfiguredCodex();
+  if (runtimeConfiguredCodex) {
+    return runtimeConfiguredCodex;
   }
 
   const packagedCodex = resolvePackagedCodex();
@@ -514,6 +580,7 @@ function resolveCodexCommand() {
         command: cargoPath,
         args: cargoRunCodexArgs(),
         env: {},
+        source: "cargo_on_path",
       };
     }
 
@@ -523,6 +590,7 @@ function resolveCodexCommand() {
         command: rustupCargo.command,
         args: [...rustupCargo.args, ...cargoRunCodexArgs()],
         env: rustupCargo.env,
+        source: "rustup_cargo",
       };
     }
   }
@@ -532,6 +600,7 @@ function resolveCodexCommand() {
       command: localCodexBin,
       args: jasperCodexConfigArgs(),
       env: {},
+      source: "local_binary",
     };
   }
 
@@ -541,6 +610,7 @@ function resolveCodexCommand() {
       command: cargoPath,
       args: cargoRunCodexArgs(),
       env: {},
+      source: "cargo_on_path",
     };
   }
 
@@ -550,6 +620,7 @@ function resolveCodexCommand() {
       command: rustupCargo.command,
       args: [...rustupCargo.args, ...cargoRunCodexArgs()],
       env: rustupCargo.env,
+      source: "rustup_cargo",
     };
   }
 
@@ -619,7 +690,13 @@ if (
   child = spawnProcess(
     process.execPath,
     [agentCliPath, "setup", ...args.slice(1)],
-    jasperChildEnv(process.env),
+    jasperSetupEnv(process.env),
+  );
+} else if (subcommand === "doctor") {
+  child = spawnProcess(
+    process.execPath,
+    [agentCliPath, "doctor", ...args.slice(1)],
+    jasperSetupEnv(process.env),
   );
 } else {
   const codex = resolveCodexCommand();

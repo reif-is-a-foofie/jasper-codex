@@ -61,9 +61,10 @@ jasper
 - If `codex-cli/vendor` is already hydrated, the Jasper packager will pick it up automatically.
 - Installable Jasper packages must be self-contained. End users should not need Rust, cargo, or other build tools on PATH.
 - `jasper setup` currently uses Docker as a developer fallback for local Qdrant provisioning. The packaged Jasper app should manage local services internally instead of asking end users to install infrastructure.
+- `jasper doctor` reports whether Jasper has a usable runtime, OpenAI/Codex auth, and a healthy local semantic-store configuration.
 - Jasper writes raw memory into local JSONL logs first, then `jasper memory materialize` can push that history into the local semantic index.
 - The near-term semantic-memory plan is `fastembed` with bundled local model and runtime assets plus local-first storage, not a hosted dependency.
-- End-user OpenAI authentication and guided connector setup are intentionally deferred for now. Packaged users will still need manual credential and connector setup until onboarding is implemented.
+- `jasper setup` now validates existing OpenAI/Codex auth when possible; guided connector setup is still deferred for now.
 - In the current terminal product, installed calendar and mailbox tools can already surface from normal household prompts; missing household connectors should route the user to `/apps`.
 - Live terminal Jasper now also runs automatic after-turn tool intake and remembers tool-status summaries, so Jasper can keep pulling in connector/quarantine/build work while you use it.
 - Some deeper docs and source directories still use Codex naming because the fork inherits upstream internals.
