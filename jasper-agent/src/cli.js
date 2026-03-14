@@ -8,12 +8,14 @@ import { createReflectionStore } from "../../jasper-memory/src/reflections.js";
 import { generateToolFromTemplate } from "../../jasper-tools/src/generator.js";
 import { listGeneratorTemplates } from "../../jasper-tools/src/generator.js";
 import { createToolRegistry } from "../../jasper-tools/src/registry.js";
+import { createToolAcquisitionStore } from "./broker/acquisition-store.js";
 import { createCapabilityBroker } from "./broker/index.js";
+import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
 import { createJasperRuntime } from "./runtime.js";
 
 function printUsage() {
   process.stdout.write(`Usage:
-  node jasper-agent/src/cli.js start [--identity PATH] [--interval-ms N] [--max-ticks N] [--memory-root PATH] [--watch-path PATH]
+  node jasper-agent/src/cli.js start [--identity PATH] [--interval-ms N] [--max-ticks N] [--memory-root PATH] [--tools-root PATH] [--watch-path PATH]
   node jasper-agent/src/cli.js setup [--jasper-home PATH] [--skip-qdrant] [--qdrant-url URL] [--qdrant-container-name NAME] [--qdrant-image IMAGE]
   node jasper-agent/src/cli.js setup status [--jasper-home PATH]
   node jasper-agent/src/cli.js identity [--identity PATH]
@@ -24,6 +26,21 @@ function printUsage() {
   node jasper-agent/src/cli.js dream reflect [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js dream recent [--memory-root PATH] [--limit N]
   node jasper-agent/src/cli.js tools list [--identity PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js tools scout QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
+  node jasper-agent/src/cli.js tools needs QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
+  node jasper-agent/src/cli.js tools search QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
+  node jasper-agent/src/cli.js tools quarantine QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
+  node jasper-agent/src/cli.js tools build QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
+  node jasper-agent/src/cli.js tools plan QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
+  node jasper-agent/src/cli.js tools acquire QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH] [--jasper-home PATH]
+  node jasper-agent/src/cli.js tools acquisitions [--limit N] [--type STATUS] [--jasper-home PATH]
+  node jasper-agent/src/cli.js tools maintain [--limit N] [--jasper-home PATH] [--tools-root PATH]
+  node jasper-agent/src/cli.js tools providers [--limit N] [--jasper-home PATH]
+  node jasper-agent/src/cli.js tools quarantine list [--limit N] [--jasper-home PATH]
+  node jasper-agent/src/cli.js tools quarantine admit RECORD_ID CANDIDATE_ID [--description TEXT] [--jasper-home PATH]
+  node jasper-agent/src/cli.js tools quarantine reject RECORD_ID CANDIDATE_ID [--description TEXT] [--jasper-home PATH]
+  node jasper-agent/src/cli.js tools activate RECORD_ID CANDIDATE_ID [--description TEXT] [--jasper-home PATH]
+  node jasper-agent/src/cli.js tools build-local RECORD_ID [--id TOOL_ID] [--template TEMPLATE] [--description TEXT] [--tools-root PATH] [--query TEXT] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js tools templates
   node jasper-agent/src/cli.js tools generate --id TOOL_ID --template TEMPLATE --description TEXT [--tools-root PATH] [--query TEXT] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js tools run TOOL_ID [--identity PATH] [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE] [--query TEXT]
@@ -166,6 +183,24 @@ function printJson(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+function inspectToolPlan(toolOptions) {
+  const query = toolOptions.positionals.join(" ").trim();
+  if (!query) {
+    throw new Error("Tool planning requires a query string");
+  }
+
+  const broker = createCapabilityBroker({
+    identityPath: toolOptions.identityPath,
+    memoryRoot: toolOptions.memoryRoot,
+    jasperHome: toolOptions.jasperHome,
+    toolsRoot: toolOptions.toolsRoot,
+  });
+
+  return broker.inspectRequest(query, {
+    limit: toolOptions.limit,
+  });
+}
+
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
   if (!command) {
@@ -269,15 +304,231 @@ async function main() {
   if (command === "tools") {
     const [toolCommand, ...toolArgs] = rest;
     const toolOptions = parseArgs(toolArgs);
-    const registry = createToolRegistry({
+    const registryOptions = {
       identityPath: toolOptions.identityPath,
       memoryRoot: toolOptions.memoryRoot,
       jasperHome: toolOptions.jasperHome,
       toolsRoot: toolOptions.toolsRoot,
+    };
+    const registry = createToolRegistry(registryOptions);
+    const broker = createCapabilityBroker(registryOptions);
+    const acquisitionStore = createToolAcquisitionStore({
+      jasperHome: toolOptions.jasperHome,
+    });
+    const toolMaintenanceWorker = createToolMaintenanceWorker({
+      jasperHome: toolOptions.jasperHome,
+      toolsRoot: toolOptions.toolsRoot,
+      acquisitionStore,
     });
 
     if (toolCommand === "list") {
       printJson(registry.listTools());
+      return;
+    }
+
+    if (toolCommand === "acquisitions") {
+      printJson(
+        acquisitionStore.listAcquisitions({
+          limit: toolOptions.limit,
+          status: toolOptions.type,
+        }),
+      );
+      return;
+    }
+
+    if (toolCommand === "providers") {
+      printJson(
+        acquisitionStore.listActivatedProviders({ limit: toolOptions.limit }),
+      );
+      return;
+    }
+
+    if (toolCommand === "maintain") {
+      printJson(toolMaintenanceWorker.maintain({ limit: toolOptions.limit }));
+      return;
+    }
+
+    if (toolCommand === "acquire") {
+      const query = toolOptions.positionals.join(" ").trim();
+      if (!query) {
+        throw new Error("Tool acquisition requires a query string");
+      }
+
+      printJson(
+        broker.acquireRequest(query, {
+          limit: toolOptions.limit,
+          id: toolOptions.id,
+          description: toolOptions.description,
+          template: toolOptions.template,
+          query: toolOptions.query,
+          type: toolOptions.type,
+          source: toolOptions.source,
+        }),
+      );
+      return;
+    }
+
+    if (
+      toolCommand === "scout" ||
+      toolCommand === "needs" ||
+      toolCommand === "search" ||
+      toolCommand === "build" ||
+      toolCommand === "plan"
+    ) {
+      const plan = inspectToolPlan(toolOptions);
+
+      if (toolCommand === "needs") {
+        printJson({
+          request: plan.request,
+          acknowledgement: plan.acknowledgement,
+          requirement: plan.internalPlan.acquisition?.requirement || null,
+          primaryCapabilityId: plan.internalPlan.primaryCapabilityId,
+          primaryProvider: plan.internalPlan.primaryProvider,
+        });
+        return;
+      }
+
+      if (toolCommand === "search") {
+        printJson(plan.internalPlan.acquisition?.search || null);
+        return;
+      }
+
+      if (toolCommand === "build") {
+        printJson(plan.internalPlan.acquisition?.build || null);
+        return;
+      }
+
+      printJson({
+        request: plan.request,
+        acknowledgement: plan.acknowledgement,
+        publicPlan: plan.publicPlan,
+        toolAcquisition: plan.internalPlan.acquisition,
+        primaryCapabilityId: plan.internalPlan.primaryCapabilityId,
+        primaryProvider: plan.internalPlan.primaryProvider,
+      });
+      return;
+    }
+
+    if (toolCommand === "quarantine") {
+      const [subcommand, recordId, candidateId, ...queryParts] =
+        toolOptions.positionals;
+
+      if (subcommand === "list") {
+        printJson(
+          acquisitionStore.listQuarantineQueue({ limit: toolOptions.limit }),
+        );
+        return;
+      }
+
+      if (subcommand === "admit") {
+        if (!recordId || !candidateId) {
+          throw new Error(
+            "Tools quarantine admit requires a RECORD_ID and CANDIDATE_ID",
+          );
+        }
+        printJson(
+          acquisitionStore.admitCandidate(
+            recordId,
+            candidateId,
+            toolOptions.description,
+          ),
+        );
+        return;
+      }
+
+      if (subcommand === "reject") {
+        if (!recordId || !candidateId) {
+          throw new Error(
+            "Tools quarantine reject requires a RECORD_ID and CANDIDATE_ID",
+          );
+        }
+        printJson(
+          acquisitionStore.rejectCandidate(
+            recordId,
+            candidateId,
+            toolOptions.description,
+          ),
+        );
+        return;
+      }
+
+      printJson(
+        inspectToolPlan({
+          ...toolOptions,
+          positionals: [
+            subcommand,
+            recordId,
+            candidateId,
+            ...queryParts,
+          ].filter(Boolean),
+        }).internalPlan.acquisition?.quarantine || null,
+      );
+      return;
+    }
+
+    if (toolCommand === "build-local") {
+      const [recordId] = toolOptions.positionals;
+      if (!recordId) {
+        throw new Error("Tools build-local requires a RECORD_ID");
+      }
+
+      const record = acquisitionStore.getAcquisition(recordId);
+      if (!record) {
+        throw new Error(`Unknown acquisition record: ${recordId}`);
+      }
+
+      const template =
+        toolOptions.template || record.build?.recommendedTemplates?.[0]?.id;
+      if (!template) {
+        throw new Error(
+          "Tools build-local requires a template or a record with a recommended template",
+        );
+      }
+
+      const fallbackId = String(
+        record.primaryCapabilityId ||
+          record.requirement?.label ||
+          "jasper-tool",
+      )
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      const generation = generateToolFromTemplate({
+        id: toolOptions.id || fallbackId,
+        template,
+        description:
+          toolOptions.description ||
+          `${record.requirement?.label || "Jasper"} tool`,
+        toolsRoot: toolOptions.toolsRoot,
+        query: toolOptions.query || record.request,
+        limit: toolOptions.limit,
+        type: toolOptions.type,
+        source: toolOptions.source,
+      });
+
+      printJson({
+        generation,
+        acquisition: acquisitionStore.recordGeneratedBuild(
+          recordId,
+          generation,
+        ),
+      });
+      return;
+    }
+
+    if (toolCommand === "activate") {
+      const [recordId, candidateId] = toolOptions.positionals;
+      if (!recordId || !candidateId) {
+        throw new Error("Tools activate requires a RECORD_ID and CANDIDATE_ID");
+      }
+
+      printJson(
+        acquisitionStore.activateCandidate(
+          recordId,
+          candidateId,
+          toolOptions.description,
+        ),
+      );
       return;
     }
 

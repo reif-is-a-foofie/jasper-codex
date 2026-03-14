@@ -5,6 +5,7 @@ import { loadGeneratedRegistry } from "./generator.js";
 import { createIdentitySummaryTool } from "./tools/identity-summary.js";
 import { createRecentMemoryTool } from "./tools/recent-memory.js";
 import { createSemanticMemorySearchTool } from "./tools/semantic-memory-search.js";
+import { createWebResearchTool } from "./tools/web-research.js";
 
 export function createToolContext(options = {}) {
   return {
@@ -13,6 +14,9 @@ export function createToolContext(options = {}) {
       root: options.memoryRoot,
       jasperHome: options.jasperHome,
     }),
+    webResearchRunner: options.webResearchRunner,
+    codexExecutablePath: options.codexExecutablePath,
+    codexWorkingDirectory: options.codexWorkingDirectory,
   };
 }
 
@@ -33,6 +37,7 @@ export function createToolRegistry(options = {}) {
     createIdentitySummaryTool(context),
     createRecentMemoryTool(context),
     createSemanticMemorySearchTool(context),
+    createWebResearchTool(context),
     ...generatedTools,
   ];
 

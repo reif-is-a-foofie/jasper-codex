@@ -5471,6 +5471,7 @@ fn filter_connectors_for_input(
     input: &[ResponseItem],
     explicitly_enabled_connectors: &HashSet<String>,
     skill_name_counts_lower: &HashMap<String, usize>,
+    infer_household_intents: bool,
 ) -> Vec<connectors::AppInfo> {
     let connectors: Vec<connectors::AppInfo> = connectors
         .iter()
@@ -5504,6 +5505,9 @@ fn filter_connectors_for_input(
             allowed_connector_ids.insert(connector_id.to_string());
         }
     }
+    if infer_household_intents {
+        allowed_connector_ids.extend(infer_household_connector_ids(&connectors, &user_messages));
+    }
 
     connectors
         .into_iter()
@@ -5515,6 +5519,110 @@ fn filter_connectors_for_input(
                 &connector_slug_counts,
                 skill_name_counts_lower,
             )
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum HouseholdConnectorIntent {
+    Calendar,
+    Mailbox,
+}
+
+fn infer_household_connector_ids(
+    connectors: &[connectors::AppInfo],
+    user_messages: &[String],
+) -> HashSet<String> {
+    let inferred_intents = detect_household_connector_intents(user_messages);
+    if inferred_intents.is_empty() {
+        return HashSet::new();
+    }
+
+    inferred_intents
+        .into_iter()
+        .filter_map(|intent| {
+            let matching_connectors = connectors
+                .iter()
+                .filter(|connector| connector_matches_household_intent(connector, intent))
+                .collect::<Vec<_>>();
+            if matching_connectors.len() == 1 {
+                matching_connectors
+                    .first()
+                    .map(|connector| connector.id.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn detect_household_connector_intents(
+    user_messages: &[String],
+) -> HashSet<HouseholdConnectorIntent> {
+    let words = collect_lowercase_words(user_messages.iter().map(String::as_str));
+    let mut intents = HashSet::new();
+
+    if words.contains("calendar")
+        || words.contains("meeting")
+        || words.contains("meetings")
+        || words.contains("schedule")
+        || words.contains("scheduled")
+        || words.contains("scheduling")
+        || words.contains("appointment")
+        || words.contains("appointments")
+        || words.contains("event")
+        || words.contains("events")
+        || words.contains("availability")
+        || words.contains("busy")
+        || words.contains("invite")
+        || words.contains("invites")
+    {
+        intents.insert(HouseholdConnectorIntent::Calendar);
+    }
+
+    if words.contains("email")
+        || words.contains("emails")
+        || words.contains("mail")
+        || words.contains("mailbox")
+        || words.contains("inbox")
+        || words.contains("gmail")
+        || words.contains("unread")
+    {
+        intents.insert(HouseholdConnectorIntent::Mailbox);
+    }
+
+    intents
+}
+
+fn connector_matches_household_intent(
+    connector: &connectors::AppInfo,
+    intent: HouseholdConnectorIntent,
+) -> bool {
+    let words = collect_lowercase_words([connector.id.as_str(), connector.name.as_str()]);
+    match intent {
+        HouseholdConnectorIntent::Calendar => words.contains("calendar"),
+        HouseholdConnectorIntent::Mailbox => {
+            words.contains("mailbox")
+                || words.contains("gmail")
+                || words.contains("email")
+                || words.contains("mail")
+                || words.contains("inbox")
+                || words.contains("outlook")
+        }
+    }
+}
+
+fn collect_lowercase_words<'a, I>(values: I) -> HashSet<String>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    values
+        .into_iter()
+        .flat_map(|value| {
+            value
+                .split(|ch: char| !ch.is_ascii_alphanumeric())
+                .filter(|part| !part.is_empty())
+                .map(|part| part.to_ascii_lowercase())
         })
         .collect()
 }
@@ -5756,6 +5864,10 @@ async fn built_tools(
     });
 
     if let Some(connectors) = connectors.as_ref() {
+        let infer_household_intents = std::env::var("JASPER_BRANDED")
+            .ok()
+            .as_deref()
+            .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
         let skill_name_counts_lower = skills_outcome.map_or_else(HashMap::new, |outcome| {
             build_skill_name_counts(&outcome.skills, &outcome.disabled_paths).1
         });
@@ -5765,6 +5877,7 @@ async fn built_tools(
             input,
             &effective_explicitly_enabled_connectors,
             &skill_name_counts_lower,
+            infer_household_intents,
         );
 
         let mut selected_mcp_tools = filter_non_codex_apps_mcp_tools_only(&mcp_tools);
@@ -7076,6 +7189,7 @@ mod tests {
             &input,
             &explicitly_enabled_connectors,
             &skill_name_counts_lower,
+            false,
         );
 
         assert_eq!(selected, Vec::new());
@@ -7093,6 +7207,7 @@ mod tests {
             &input,
             &explicitly_enabled_connectors,
             &skill_name_counts_lower,
+            false,
         );
 
         assert_eq!(selected, Vec::new());
@@ -7109,6 +7224,74 @@ mod tests {
             &input,
             &explicitly_enabled_connectors,
             &HashMap::new(),
+            false,
+        );
+
+        assert_eq!(selected, Vec::new());
+    }
+
+    #[test]
+    fn filter_connectors_for_input_inferrs_calendar_connector_for_jasper_household_prompt() {
+        let connectors = vec![make_connector("calendar", "Google Calendar")];
+        let input = vec![user_message("What meetings do I have tomorrow?")];
+
+        let selected = filter_connectors_for_input(
+            &connectors,
+            &input,
+            &HashSet::new(),
+            &HashMap::new(),
+            true,
+        );
+
+        assert_eq!(selected, connectors);
+    }
+
+    #[test]
+    fn filter_connectors_for_input_inferrs_mailbox_connector_for_jasper_household_prompt() {
+        let connectors = vec![make_connector("connector_gmail", "Gmail")];
+        let input = vec![user_message("Check my inbox for anything urgent.")];
+
+        let selected = filter_connectors_for_input(
+            &connectors,
+            &input,
+            &HashSet::new(),
+            &HashMap::new(),
+            true,
+        );
+
+        assert_eq!(selected, connectors);
+    }
+
+    #[test]
+    fn filter_connectors_for_input_skips_implicit_household_intent_when_ambiguous() {
+        let connectors = vec![
+            make_connector("google-calendar", "Google Calendar"),
+            make_connector("icloud-calendar", "iCloud Calendar"),
+        ];
+        let input = vec![user_message("What meetings do I have tomorrow?")];
+
+        let selected = filter_connectors_for_input(
+            &connectors,
+            &input,
+            &HashSet::new(),
+            &HashMap::new(),
+            true,
+        );
+
+        assert_eq!(selected, Vec::new());
+    }
+
+    #[test]
+    fn filter_connectors_for_input_does_not_infer_household_connector_outside_jasper() {
+        let connectors = vec![make_connector("calendar", "Google Calendar")];
+        let input = vec![user_message("What meetings do I have tomorrow?")];
+
+        let selected = filter_connectors_for_input(
+            &connectors,
+            &input,
+            &HashSet::new(),
+            &HashMap::new(),
+            false,
         );
 
         assert_eq!(selected, Vec::new());
@@ -7188,6 +7371,7 @@ mod tests {
             &[user_message("run echo")],
             &explicitly_enabled_connectors,
             &HashMap::new(),
+            false,
         );
         let apps_mcp_tools = filter_codex_apps_mcp_tools_only(&mcp_tools, &connectors);
         selected_mcp_tools.extend(apps_mcp_tools);
@@ -7227,6 +7411,7 @@ mod tests {
             &[user_message("run the selected tools")],
             &explicitly_enabled_connectors,
             &HashMap::new(),
+            false,
         );
         let apps_mcp_tools = filter_codex_apps_mcp_tools_only(&mcp_tools, &connectors);
         selected_mcp_tools.extend(apps_mcp_tools);
@@ -7269,6 +7454,7 @@ mod tests {
             &[user_message("use $calendar and then echo the response")],
             &explicitly_enabled_connectors,
             &HashMap::new(),
+            false,
         );
         let apps_mcp_tools = filter_codex_apps_mcp_tools_only(&mcp_tools, &connectors);
         selected_mcp_tools.extend(apps_mcp_tools);

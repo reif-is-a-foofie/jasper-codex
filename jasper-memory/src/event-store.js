@@ -160,12 +160,12 @@ function resolveRuntimeMemoryConfig(options, root) {
   };
 }
 
-export function defaultMemoryRoot() {
-  return ensureJasperHomeLayout().memoryDir || memoryRoot;
+export function defaultMemoryRoot(options = {}) {
+  return ensureJasperHomeLayout(options).memoryDir || memoryRoot;
 }
 
 export function ensureMemoryLayout(options = {}) {
-  const root = path.resolve(options.root || defaultMemoryRoot());
+  const root = path.resolve(options.root || defaultMemoryRoot(options));
   for (const relativeDir of MEMORY_DIRECTORIES) {
     fs.mkdirSync(path.join(root, relativeDir), { recursive: true });
   }
@@ -223,7 +223,10 @@ export function createMemoryEvent(input = {}) {
 
 export class JasperEventStore {
   constructor(options = {}) {
-    this.layout = ensureMemoryLayout({ root: options.root });
+    this.layout = ensureMemoryLayout({
+      root: options.root,
+      jasperHome: options.jasperHome,
+    });
     this.root = this.layout.root;
     this.defaultSource = String(options.source || "jasper").trim() || "jasper";
     this.eventLogPath = defaultEventLogPath({ root: this.root });

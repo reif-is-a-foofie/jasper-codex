@@ -39,3 +39,9 @@ Milestone 6 begins with:
 
 - generated tool specs and modules in `jasper-tools/generated/`
 - CLI-driven tool generation from repeatable templates
+- broker-backed tool scouting with quarantine/build guidance
+- tool acquisition planning for need detection, search, quarantine, and build fallback
+- broker-backed acquisition materialization for built-in and Jasper-generated tool paths
+- activation state for admitted external providers so later requests can reuse trusted candidates
+- a first-party web-research tool that bridges into upstream Codex web search
+- runtime tool maintenance that processes Jasper's self-build queue during normal ticks

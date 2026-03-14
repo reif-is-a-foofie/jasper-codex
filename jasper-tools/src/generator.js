@@ -5,6 +5,18 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const defaultToolsRoot = path.resolve(__dirname, "..");
+const GENERATOR_TEMPLATES = [
+  {
+    id: "recent-memory",
+    description:
+      "Return recent Jasper memory events with optional source/type filters.",
+  },
+  {
+    id: "semantic-memory-search",
+    description:
+      "Search Jasper memory with a saved semantic query and optional filters.",
+  },
+];
 
 function toKebabCase(value) {
   return String(value || "")
@@ -56,21 +68,16 @@ export function loadGeneratedRegistry(inputRoot) {
 
 export function saveGeneratedRegistry(entries, inputRoot) {
   const layout = ensureGeneratedLayout(inputRoot);
-  fs.writeFileSync(layout.registryPath, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
+  fs.writeFileSync(
+    layout.registryPath,
+    `${JSON.stringify(entries, null, 2)}\n`,
+    "utf8",
+  );
   return layout.registryPath;
 }
 
 export function listGeneratorTemplates() {
-  return [
-    {
-      id: "recent-memory",
-      description: "Return recent Jasper memory events with optional source/type filters.",
-    },
-    {
-      id: "semantic-memory-search",
-      description: "Search Jasper memory with a saved semantic query and optional filters.",
-    },
-  ];
+  return GENERATOR_TEMPLATES.map((template) => ({ ...template }));
 }
 
 export function createGeneratedToolSpec(options = {}) {
@@ -83,6 +90,14 @@ export function createGeneratedToolSpec(options = {}) {
   }
   if (!template) {
     throw new Error("Generated tool requires a template");
+  }
+  if (!GENERATOR_TEMPLATES.some((entry) => entry.id === template)) {
+    const validTemplates = GENERATOR_TEMPLATES.map((entry) => entry.id).join(
+      ", ",
+    );
+    throw new Error(
+      `Unsupported Jasper tool template: ${template}. Valid templates: ${validTemplates}`,
+    );
   }
   if (!description) {
     throw new Error("Generated tool requires a description");
@@ -114,7 +129,9 @@ export function generateToolFromTemplate(options = {}) {
   const modulePath = path.join(layout.toolsDir, moduleFilename);
   fs.writeFileSync(modulePath, renderGeneratedToolModule(spec), "utf8");
 
-  const registry = loadGeneratedRegistry(layout.toolsRoot).filter((entry) => entry.id !== spec.id);
+  const registry = loadGeneratedRegistry(layout.toolsRoot).filter(
+    (entry) => entry.id !== spec.id,
+  );
   const metadata = {
     id: spec.id,
     description: spec.description,

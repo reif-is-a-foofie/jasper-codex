@@ -33,6 +33,7 @@ Internally, Jasper decides whether it needs:
 - a connector
 - a Claw-provided capability
 - an MCP-backed capability
+- a new Jasper-owned tool that should be built in-house
 
 ## Hidden Internal Agents
 
@@ -80,6 +81,33 @@ Default behavior:
 
 MCP and provider infrastructure should be activated on demand by the broker when a capability requires them.
 
+## Tool Acquisition Loop
+
+When Jasper does not already have a direct tool path, the broker should stay capability-first and move through an acquisition loop:
+
+1. infer the needed capability from the request
+2. scout Jasper-owned, connector, curated provider channels first
+3. quarantine unknown or community-provided candidates before admission
+4. build a Jasper-owned tool when no candidate is safe and sufficient
+
+Quarantine means:
+
+- keep the candidate out of normal routing
+- review permissions, auth model, and data egress
+- run it in isolation first
+- confirm it is maintained and narrow in scope
+
+The `tools scout` and `broker inspect` flows should expose this internal planning state without forcing the user to think in provider plumbing.
+
+`tools acquire` should persist the chosen path and complete only the flows Jasper can already execute locally:
+
+- built-in Jasper tools
+- Jasper-owned generated tools
+
+Connector consent and external quarantine work should stay recorded but deferred until those runtimes exist for real.
+
+Admitted curated `claw` and `mcp` candidates can now be activated for future routing, so the broker can treat them as available on later requests without re-running quarantine.
+
 ## Success Condition
 
 The broker is working when Jasper can:
@@ -88,4 +116,7 @@ The broker is working when Jasper can:
 - infer the required capability
 - choose a provider path
 - distinguish between available, consent-required, and auto-provisionable actions
+- persist the chosen acquisition state
+- materialize built-in and Jasper-generated tool paths immediately
+- plan how to scout, quarantine, or build missing tool paths
 - keep all of that internal to Jasper

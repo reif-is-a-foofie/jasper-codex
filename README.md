@@ -61,6 +61,8 @@ jasper
 - Jasper writes raw memory into local JSONL logs first, then `jasper memory materialize` can push that history into the local semantic index.
 - The near-term semantic-memory plan is `fastembed` with bundled local model and runtime assets plus local-first storage, not a hosted dependency.
 - End-user OpenAI authentication and guided connector setup are intentionally deferred for now. Packaged users will still need manual credential and connector setup until onboarding is implemented.
+- In the current terminal product, installed calendar and mailbox tools can already surface from normal household prompts; missing household connectors should route the user to `/apps`.
+- Live terminal Jasper now also runs automatic after-turn tool intake and remembers tool-status summaries, so Jasper can keep pulling in connector/quarantine/build work while you use it.
 - Some deeper docs and source directories still use Codex naming because the fork inherits upstream internals.
 - The maintained Jasper product contract lives in [docs/jasper/PROJECT_DETAILS.md](./docs/jasper/PROJECT_DETAILS.md).
 
@@ -68,6 +70,7 @@ jasper
 
 - [**Jasper PRD**](./docs/jasper/PROJECT_DETAILS.md)
 - [**Jasper Onboarding**](./docs/jasper/AUTOMATIC_ONBOARDING.md)
+- [**Jasper Tool Acquisition**](./docs/jasper/TOOL_ACQUISITION.md)
 - [**Jasper Fork Strategy**](./docs/jasper/FORK_STRATEGY.md)
 - [**Jasper Overlay**](./jasper-overlay/README.md)
 - [**Upstream Codex Documentation**](https://developers.openai.com/codex)

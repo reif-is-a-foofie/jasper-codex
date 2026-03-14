@@ -41,9 +41,10 @@ At Jasper boot:
 
 1. load identity
 2. load companion manifesto
-3. compose developer instructions from both
+3. compose developer instructions from identity, manifesto, and Jasper tool-bridge guidance
 4. load memory context
 5. start the Codex runtime as Jasper
+6. keep background tool intake running after completed chat turns
 
 The user should not see internal system names or plumbing.
 

@@ -28,6 +28,16 @@ function formatMemoryLine(event) {
     return date ? `- ${date}: ${summary}` : `- ${summary}`;
   }
 
+  if (eventType.startsWith("tooling.")) {
+    const summary = truncateText(event?.payload?.summary || "");
+    if (!summary) {
+      return null;
+    }
+
+    const date = String(event?.ts || "").slice(0, 10);
+    return date ? `- ${date}: ${summary}` : `- ${summary}`;
+  }
+
   const text = truncateText(event?.payload?.text || "");
   if (!text) {
     return null;
@@ -54,14 +64,27 @@ export function buildStartupMemoryInstructions(options = {}) {
         type: "user.chat.submitted",
       })
       .filter((event) => normalizeText(event?.payload?.text));
+    const toolingEvents = store
+      .listRecentEvents({
+        limit: options.limit || DEFAULT_MEMORY_BRIEF_LIMIT,
+      })
+      .filter(
+        (event) =>
+          String(event?.type || "").startsWith("tooling.") &&
+          normalizeText(event?.payload?.summary),
+      );
 
-    if (factEvents.length === 0 && chatEvents.length === 0) {
+    if (
+      factEvents.length === 0 &&
+      chatEvents.length === 0 &&
+      toolingEvents.length === 0
+    ) {
       return "";
     }
 
     const lines = [
       ...new Set(
-        [...factEvents, ...chatEvents]
+        [...factEvents, ...chatEvents, ...toolingEvents]
           .map(formatMemoryLine)
           .filter(Boolean),
       ),

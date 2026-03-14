@@ -99,6 +99,16 @@ struct SubmittedTurnPayload {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ToolIntakeRequestedPayload {
+    thread_id: String,
+    turn_id: String,
+    client_name: Option<String>,
+    request: String,
+    char_count: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CompletedTurnPayload {
     thread_id: String,
     turn_id: String,
@@ -212,6 +222,12 @@ struct ExtractedFact {
     normalized_value: String,
     summary: String,
     source_text: String,
+}
+
+#[derive(Default)]
+struct RecentConversationContext {
+    latest_user_message: Option<String>,
+    latest_assistant_message: Option<String>,
 }
 
 type SharedFastembedModel = Arc<Mutex<TextEmbedding>>;
@@ -330,6 +346,8 @@ fn record_submitted_turn_to_home(
     if text.trim().is_empty() {
         return Ok(());
     }
+    let conversation_context = recent_conversation_context(jasper_home, thread_id);
+    let extracted_facts = extract_user_facts(&text, &conversation_context);
 
     let counts = count_non_text_items(items);
     let text_element_count = items
@@ -375,7 +393,43 @@ fn record_submitted_turn_to_home(
         },
     };
     append_event_with_embedding(jasper_home, &event, timestamp)?;
-    record_extracted_facts_to_home(jasper_home, thread_id, turn_id, client_name, &text)
+    let intake_event = EventRecord {
+        schema_version: 1,
+        id: format!("evt_{}", Uuid::now_v7()),
+        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        r#type: "tooling.intake.requested".to_string(),
+        source: "jasper-tooling".to_string(),
+        tags: vec![
+            "tooling".to_string(),
+            "intake".to_string(),
+            "request".to_string(),
+            "chat".to_string(),
+        ],
+        session: SessionRecord {
+            id: thread_id.to_string(),
+        },
+        payload: ToolIntakeRequestedPayload {
+            thread_id: thread_id.to_string(),
+            turn_id: turn_id.to_string(),
+            client_name: client_name.map(ToOwned::to_owned),
+            request: text.clone(),
+            char_count: text.chars().count(),
+        },
+    };
+    let events_dir = jasper_home
+        .join("data")
+        .join("memory")
+        .join("data")
+        .join("events");
+    std::fs::create_dir_all(&events_dir)?;
+    append_json_line(events_dir.join("events.jsonl"), &intake_event)?;
+    record_extracted_facts_to_home(
+        jasper_home,
+        thread_id,
+        turn_id,
+        client_name,
+        extracted_facts,
+    )
 }
 
 pub fn build_relevant_memory_context(
@@ -533,9 +587,9 @@ fn record_extracted_facts_to_home(
     thread_id: &str,
     turn_id: &str,
     client_name: Option<&str>,
-    text: &str,
+    facts: Vec<ExtractedFact>,
 ) -> std::io::Result<()> {
-    for fact in extract_user_facts(text) {
+    for fact in facts {
         let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let event = EventRecord {
             schema_version: 1,
@@ -948,7 +1002,7 @@ fn deterministic_embed_text(value: &str, dimension: usize) -> Vec<f64> {
     normalize_vector(vector)
 }
 
-fn extract_user_facts(text: &str) -> Vec<ExtractedFact> {
+fn extract_user_facts(text: &str, context: &RecentConversationContext) -> Vec<ExtractedFact> {
     let mut facts = Vec::new();
     let mut seen = HashSet::new();
 
@@ -1022,8 +1076,60 @@ fn extract_user_facts(text: &str) -> Vec<ExtractedFact> {
         |value| format!("User prefers {value} responses."),
         is_plausible_preference,
     );
+    if contextual_home_location_prompt(context) {
+        let value = clean_fact_value(text);
+        let normalized_value = normalize_fact_value(&value);
+        let word_count = normalized_value.split_whitespace().count();
+        if is_plausible_location(&value)
+            && !normalized_value.is_empty()
+            && !normalized_value.contains('?')
+            && (value.contains(',') || word_count >= 2)
+            && !matches!(
+                normalized_value.as_str(),
+                "yes"
+                    | "no"
+                    | "maybe"
+                    | "idk"
+                    | "i dont know"
+                    | "i do not know"
+                    | "not sure"
+                    | "unknown"
+                    | "here"
+                    | "there"
+            )
+        {
+            let key = format!("location:home_location:{normalized_value}");
+            if seen.insert(key) {
+                facts.push(ExtractedFact {
+                    category: "location",
+                    attribute: "home_location",
+                    summary: format!("User lives in {value}."),
+                    source_text: value.clone(),
+                    normalized_value,
+                    value,
+                });
+            }
+        }
+    }
 
     facts
+}
+
+fn contextual_home_location_prompt(context: &RecentConversationContext) -> bool {
+    [
+        context.latest_user_message.as_deref(),
+        context.latest_assistant_message.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(normalize_fact_value)
+    .any(|message| {
+        message.contains("where do i live")
+            || message.contains("where i live")
+            || message.contains("home location")
+            || message.contains("exact home location")
+            || message.contains("where you live")
+    })
 }
 
 fn push_regex_fact(
@@ -1213,6 +1319,57 @@ fn stored_turn_id(event: &StoredEventRecord) -> Option<&str> {
     event.payload.get("turnId").and_then(|value| value.as_str())
 }
 
+fn recent_conversation_context(jasper_home: &Path, thread_id: &str) -> RecentConversationContext {
+    let events_path = jasper_home
+        .join("data")
+        .join("memory")
+        .join("data")
+        .join("events")
+        .join("events.jsonl");
+    let mut context = RecentConversationContext::default();
+
+    for event in read_events(&events_path).into_iter().rev() {
+        if event.session.id != thread_id {
+            continue;
+        }
+
+        match event.event_type.as_str() {
+            "conversation.turn.completed" => {
+                if context.latest_user_message.is_none() {
+                    context.latest_user_message = event
+                        .payload
+                        .get("inputMessages")
+                        .and_then(|value| value.as_array())
+                        .and_then(|messages| messages.last())
+                        .and_then(|value| value.as_str())
+                        .map(ToOwned::to_owned);
+                }
+                if context.latest_assistant_message.is_none() {
+                    context.latest_assistant_message = event
+                        .payload
+                        .get("lastAssistantMessage")
+                        .and_then(|value| value.as_str())
+                        .map(ToOwned::to_owned);
+                }
+            }
+            "user.chat.submitted" if context.latest_user_message.is_none() => {
+                context.latest_user_message = event
+                    .payload
+                    .get("text")
+                    .and_then(|value| value.as_str())
+                    .map(ToOwned::to_owned);
+            }
+            _ => {}
+        }
+
+        if context.latest_user_message.is_some() && context.latest_assistant_message.is_some() {
+            break;
+        }
+    }
+
+    context
+}
+
 fn truncate_text(value: &str, max_chars: usize) -> String {
     let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut chars = normalized.chars();
@@ -1226,6 +1383,19 @@ fn truncate_text(value: &str, max_chars: usize) -> String {
 
 fn format_memory_line(event: &StoredEventRecord) -> Option<String> {
     let date = event.ts.get(..10).unwrap_or(event.ts.as_str());
+    if event.event_type.starts_with("tooling.") {
+        return event
+            .payload
+            .get("summary")
+            .and_then(|value| value.as_str())
+            .map(|value| {
+                format!(
+                    "- {date}: {}",
+                    truncate_text(value, DEFAULT_MEMORY_CONTEXT_CHAR_LIMIT)
+                )
+            });
+    }
+
     match event.event_type.as_str() {
         "conversation.turn.completed" => {
             let user = event
@@ -1352,6 +1522,7 @@ fn shares_query_token(event: &StoredEventRecord, query_text: &str) -> bool {
 mod tests {
     use super::*;
     use anyhow::Result;
+    use chrono::Utc;
     use codex_protocol::user_input::ByteRange;
     use codex_protocol::user_input::TextElement;
     use pretty_assertions::assert_eq;
@@ -1406,6 +1577,16 @@ mod tests {
         assert_eq!(event["payload"]["imageCount"], 1);
         assert_eq!(event["payload"]["mentionCount"], 1);
         assert_eq!(event["payload"]["textElementCount"], 1);
+        let intake_event = events
+            .iter()
+            .find(|event| event["type"] == "tooling.intake.requested")
+            .ok_or_else(|| anyhow::anyhow!("missing tooling intake event"))?;
+        assert_eq!(intake_event["source"], "jasper-tooling");
+        assert_eq!(intake_event["payload"]["turnId"], "turn_456");
+        assert_eq!(
+            intake_event["payload"]["request"],
+            "Remember this message from chat."
+        );
 
         let embedding_path = jasper_home
             .path()
@@ -1422,6 +1603,11 @@ mod tests {
         assert_eq!(embedding["engine"], DETERMINISTIC_EMBEDDING_ENGINE);
         assert_eq!(embedding["dimension"], 64);
         assert_eq!(embedding["vector"].as_array().map(|v| v.len()), Some(64));
+        assert!(
+            !embeddings
+                .iter()
+                .any(|embedding| embedding["eventId"] == intake_event["id"])
+        );
         Ok(())
     }
 
@@ -1488,6 +1674,54 @@ mod tests {
             event["payload"]["attribute"] == "communication_style"
                 && event["payload"]["value"] == "concise"
         }));
+        Ok(())
+    }
+
+    #[test]
+    fn record_submitted_turn_to_home_extracts_contextual_location_fact_from_terse_reply()
+    -> Result<()> {
+        let jasper_home = TempDir::new()?;
+
+        record_completed_turn_to_home(
+            jasper_home.path(),
+            "thread_context",
+            "turn_prior",
+            Some("jasper-tui"),
+            &["nice, where do I live".to_string()],
+            Some("I don’t know your exact home location from this chat."),
+        )?;
+        record_submitted_turn_to_home(
+            jasper_home.path(),
+            "thread_context",
+            "turn_reply",
+            Some("jasper-tui"),
+            &[CoreUserInput::Text {
+                text: "ozark, missouri".to_string(),
+                text_elements: vec![],
+            }],
+        )?;
+
+        let events = std::fs::read_to_string(
+            jasper_home
+                .path()
+                .join("data/memory/data/events/events.jsonl"),
+        )?
+        .lines()
+        .map(serde_json::from_str::<JsonValue>)
+        .collect::<Result<Vec<_>, _>>()?;
+        let location_fact = events
+            .iter()
+            .find(|event| {
+                event["type"] == "user.fact.extracted"
+                    && event["payload"]["attribute"] == "home_location"
+            })
+            .ok_or_else(|| anyhow::anyhow!("missing contextual home location fact"))?;
+
+        assert_eq!(location_fact["payload"]["value"], "ozark, missouri");
+        assert_eq!(
+            location_fact["payload"]["summary"],
+            "User lives in ozark, missouri."
+        );
         Ok(())
     }
 
@@ -1651,6 +1885,73 @@ mod tests {
         .ok_or_else(|| anyhow::anyhow!("missing relevant memory context"))?;
 
         assert!(context.contains("User lives in Ozark, Missouri."));
+        Ok(())
+    }
+
+    #[test]
+    fn build_relevant_memory_context_uses_contextual_location_fact_from_terse_reply() -> Result<()>
+    {
+        let jasper_home = TempDir::new()?;
+
+        record_completed_turn_to_home(
+            jasper_home.path(),
+            "thread_context",
+            "turn_prior",
+            Some("jasper-tui"),
+            &["nice, where do I live".to_string()],
+            Some("I don’t know your exact home location from this chat."),
+        )?;
+        record_submitted_turn_to_home(
+            jasper_home.path(),
+            "thread_context",
+            "turn_reply",
+            Some("jasper-tui"),
+            &[CoreUserInput::Text {
+                text: "ozark, missouri".to_string(),
+                text_elements: vec![],
+            }],
+        )?;
+
+        let context = build_relevant_memory_context_from_home(
+            jasper_home.path(),
+            &["where do i live?".to_string()],
+            Some("turn_next"),
+        )
+        .ok_or_else(|| anyhow::anyhow!("missing contextual memory"))?;
+
+        assert!(context.contains("User lives in ozark, missouri."));
+        Ok(())
+    }
+
+    #[test]
+    fn build_relevant_memory_context_includes_tooling_summary_events() -> Result<()> {
+        let jasper_home = TempDir::new()?;
+        let timestamp = Utc::now().to_rfc3339();
+        let event = EventRecord {
+            schema_version: 1,
+            id: "evt_tooling".to_string(),
+            ts: timestamp.clone(),
+            r#type: "tooling.tool.available".to_string(),
+            source: "jasper-auto-intake".to_string(),
+            tags: vec!["tooling".to_string(), "intake".to_string()],
+            session: SessionRecord {
+                id: "thread_tooling".to_string(),
+            },
+            payload: serde_json::json!({
+                "summary": "Jasper can now use local tool \"memory-semantic\" for semantic recall."
+            }),
+        };
+        append_event_with_embedding(jasper_home.path(), &event, timestamp)?;
+
+        let context = build_relevant_memory_context_from_home(
+            jasper_home.path(),
+            &["Can you use the memory-semantic tool again?".to_string()],
+            Some("turn_tooling"),
+        )
+        .ok_or_else(|| anyhow::anyhow!("missing tooling memory context"))?;
+
+        assert!(context.contains("memory-semantic"));
+        assert!(context.contains("semantic recall"));
         Ok(())
     }
 

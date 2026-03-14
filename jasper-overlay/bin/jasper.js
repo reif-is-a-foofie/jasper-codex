@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { buildStartupMemoryInstructions } from "../../jasper-core/src/startup-memory.js";
+import { buildStartupToolInstructions } from "../../jasper-core/src/startup-tools.js";
 import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
 import { buildManifestoInstructions } from "../../jasper-core/src/manifesto.js";
 
@@ -45,6 +46,7 @@ const semanticRuntimeRoot = path.join(
   "resources",
   "semantic-runtime",
 );
+const afterTurnHookPath = path.join(repoRoot, "jasper-agent", "src", "after-turn.js");
 const codexHome = path.resolve(
   process.env.CODEX_HOME || path.join(process.env.HOME || "", ".codex"),
 );
@@ -427,6 +429,10 @@ function jasperDeveloperInstructions() {
     "Never refer to yourself as Codex when speaking to the user.",
     "If asked who you are, answer that you are Jasper.",
     "Keep internal agent codenames, MCP server names, and provider plumbing hidden unless the user explicitly asks for internals.",
+    "For current-information questions, use available web research/search tools instead of relying on stale memory.",
+    "For calendar, schedule, meetings, email, inbox, or mailbox work, use relevant available tools automatically when they are present.",
+    "If an apps search or discovery tool is available and you need app tools that are not already visible, use it before asking the user to restate the request with a connector mention.",
+    "If the user asks for calendar, email, or mailbox work and the needed app tools are unavailable, explain that Jasper needs that app connected and direct the user to `/apps` in the terminal UI.",
   );
 
   try {
@@ -439,12 +445,35 @@ function jasperDeveloperInstructions() {
   if (memoryInstructions) {
     sections.push(memoryInstructions);
   }
+  const toolInstructions = buildStartupToolInstructions();
+  if (toolInstructions) {
+    sections.push(toolInstructions);
+  }
   return sections.join("\n\n");
+}
+
+function jasperAfterTurnHookConfig() {
+  if (!fs.existsSync(afterTurnHookPath)) {
+    return [];
+  }
+
+  const enabled = String(process.env.JASPER_ENABLE_AFTER_TURN_INTAKE || "1")
+    .trim()
+    .toLowerCase();
+  if (["0", "false", "no", "off"].includes(enabled)) {
+    return [];
+  }
+
+  const argv = [process.execPath, afterTurnHookPath]
+    .map((value) => JSON.stringify(value))
+    .join(", ");
+  return ["-c", `notify=[${argv}]`];
 }
 
 function jasperCodexConfigArgs() {
   return [
     ...configuredMcpDisableArgs(),
+    ...jasperAfterTurnHookConfig(),
     "-c",
     `developer_instructions=${JSON.stringify(jasperDeveloperInstructions())}`,
   ];

@@ -22,7 +22,23 @@ Current launcher behavior:
 - `node jasper-overlay/bin/jasper.js memory materialize` pushes raw-memory embeddings into the local semantic index
 - `node jasper-overlay/bin/jasper.js dream reflect` generates a Jasper reflection record
 - `node jasper-overlay/bin/jasper.js tools list` lists registered Jasper tools
+- built-in tool coverage now includes first-party web research through Codex web search
+- `node jasper-overlay/bin/jasper.js tools scout "query"` inspects the full acquisition plan for a request
+- `node jasper-overlay/bin/jasper.js tools needs "query"` identifies the capability Jasper thinks it needs
+- `node jasper-overlay/bin/jasper.js tools search "query"` shows candidate search/import lanes
+- `node jasper-overlay/bin/jasper.js tools quarantine "query"` shows the quarantine checklist and candidates Jasper would review
+- `node jasper-overlay/bin/jasper.js tools build "query"` shows whether Jasper should build the tool in-house
+- `node jasper-overlay/bin/jasper.js tools plan "query"` is an alias for the full acquisition plan
+- `node jasper-overlay/bin/jasper.js tools acquire "query"` records acquisition state under Jasper home and immediately materializes built-in or Jasper-generated tool paths when possible
+- `node jasper-overlay/bin/jasper.js tools acquisitions` lists recorded acquisition state
+- `node jasper-overlay/bin/jasper.js tools maintain` processes Jasper's build queue for locally generatable tools
+- `node jasper-overlay/bin/jasper.js tools providers` lists activated external providers
+- `node jasper-overlay/bin/jasper.js tools quarantine list` lists pending quarantine work
+- `node jasper-overlay/bin/jasper.js tools activate RECORD_ID CANDIDATE_ID` activates an admitted curated provider for future routing
+- `node jasper-overlay/bin/jasper.js tools build-local RECORD_ID --id TOOL_ID` generates a Jasper-owned tool from a recorded acquisition
 - `node jasper-overlay/bin/jasper.js tools generate ...` writes a generated Jasper tool
+- normal live chat now also runs Jasper's after-turn intake hook, so missing connector/quarantine/build work can be queued while the user keeps talking
+- Jasper startup instructions now advertise the local `jasper tools run/acquire/maintain` bridge so the live terminal agent can use Jasper-owned tools without exposing internals unless asked
 
 Packaging:
 
@@ -44,5 +60,6 @@ Installed package behavior:
 - `jasper identity`, `jasper memory`, `jasper dream`, and `jasper tools` work from the packaged Jasper JS modules without requiring a repo checkout
 - packaged Jasper should also carry its own local semantic-model and semantic-runtime assets once model-based embeddings replace the deterministic placeholder
 - OpenAI authentication and connector onboarding are not packaged as a guided flow yet; operators still need to complete those steps manually for now
+- in the live terminal chat, Jasper now auto-surfaces installed calendar and mailbox tools from normal household prompts and should send the user to `/apps` when a household connector is still missing
 
 Do not move Jasper behavior into `codex-rs/` or `codex-cli/` unless the core patch gate in `docs/jasper/FORK_STRATEGY.md` is satisfied.

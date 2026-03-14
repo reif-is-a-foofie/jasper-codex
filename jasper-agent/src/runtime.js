@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
 import { createEventStore } from "../../jasper-memory/src/event-store.js";
+import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
 import { createEnvironmentListeners } from "./listeners/index.js";
 
 function nowIso() {
@@ -45,6 +46,16 @@ export class JasperRuntime {
       maxChanges: options.listenerMaxChanges,
       maxRecentFiles: options.listenerMaxRecentFiles,
     });
+    this.toolMaintenanceWorker =
+      options.toolMaintenanceWorker ||
+      createToolMaintenanceWorker({
+        jasperHome: options.jasperHome,
+        toolsRoot: options.toolsRoot,
+      });
+    this.toolMaintenanceLimit = Math.max(
+      1,
+      Number(options.toolMaintenanceLimit ?? 3),
+    );
     this.running = false;
     this.sessionId = options.sessionId || `runtime_${randomUUID()}`;
     this.tickCount = 0;
@@ -167,6 +178,30 @@ export class JasperRuntime {
     });
   }
 
+  maintainTools() {
+    try {
+      return this.toolMaintenanceWorker.maintain({
+        limit: this.toolMaintenanceLimit,
+      });
+    } catch (error) {
+      return {
+        scanned: 0,
+        generated: [],
+        skipped: [
+          {
+            reason:
+              error instanceof Error
+                ? error.message
+                : String(error || "unknown"),
+          },
+        ],
+        generatedCount: 0,
+        skippedCount: 1,
+        failed: true,
+      };
+    }
+  }
+
   async start() {
     if (this.running) {
       throw new Error("Jasper runtime is already running");
@@ -200,6 +235,27 @@ export class JasperRuntime {
     while (this.running) {
       this.tickCount += 1;
       this.pollEnvironment();
+      const toolMaintenance = this.maintainTools();
+      if (
+        toolMaintenance.intakeAcquiredCount > 0 ||
+        toolMaintenance.intakeSkippedCount > 0 ||
+        toolMaintenance.generatedCount > 0 ||
+        toolMaintenance.skippedCount > 0
+      ) {
+        this.record(
+          "tooling.maintenance",
+          {
+            tick: this.tickCount,
+            intake: toolMaintenance.intake,
+            scanned: toolMaintenance.scanned,
+            generated: toolMaintenance.generated,
+            skipped: toolMaintenance.skipped,
+          },
+          {
+            tags: ["runtime", "tooling", "maintenance"],
+          },
+        );
+      }
       const relevantMemory = await this.loadRelevantMemory();
       this.record(
         "runtime.tick",
@@ -213,6 +269,8 @@ export class JasperRuntime {
             (event) => event.vectorScore ?? event.relevanceScore ?? 0,
           ),
           activeListeners: this.listeners.map((listener) => listener.id),
+          queuedAcquisitionCount: toolMaintenance.intakeAcquiredCount,
+          generatedToolCount: toolMaintenance.generatedCount,
         },
         {
           tags: ["runtime", "heartbeat"],

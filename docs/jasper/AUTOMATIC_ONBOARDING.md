@@ -29,8 +29,14 @@ Deferred items:
 - connector consent flows
 - mailbox, calendar, and browser onboarding
 - remote hosted vector store provisioning
+- bundling or configuring the Codex runtime needed by Jasper's first-party web-research tool in packaged installs
 
 For now, operators still need to complete authentication and connector setup manually after `jasper setup`.
+
+Current terminal behavior before guided onboarding lands:
+
+- Jasper can already auto-surface installed calendar and mailbox tools from normal household prompts during chat
+- if the user asks for household app access and the connector is still missing, Jasper should direct them to `/apps` in the terminal UI
 
 ## Qdrant Provisioning Model
 
@@ -84,3 +90,4 @@ The packaging milestone after that is app-managed infrastructure:
 2. start and stop that process from Jasper, not from Docker
 3. migrate the current developer fallback out of the default user path
 4. bundle the local embedding model and ONNX runtime artifacts inside the app so semantic recall works without first-run dependency installs
+5. bundle the Codex runtime Jasper uses for first-party web research, or write `JASPER_CODEX_EXECUTABLE` automatically during setup

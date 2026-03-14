@@ -2,7 +2,8 @@ const CAPABILITIES = [
   {
     id: "general.reasoning",
     label: "General reasoning",
-    description: "Handle a general request with Jasper's built-in reasoning layer.",
+    description:
+      "Handle a general request with Jasper's built-in reasoning layer.",
     keywords: ["question", "help", "think", "figure out", "explain"],
     phrases: [],
     providerCandidates: [
@@ -42,8 +43,19 @@ const CAPABILITIES = [
     id: "memory.semantic",
     label: "Semantic memory",
     description: "Recall related prior context from Jasper memory.",
-    keywords: ["remember", "recall", "context", "history", "discussed", "before"],
-    phrases: ["what have we talked about", "did we talk about", "remind me about"],
+    keywords: [
+      "remember",
+      "recall",
+      "context",
+      "history",
+      "discussed",
+      "before",
+    ],
+    phrases: [
+      "what have we talked about",
+      "did we talk about",
+      "remind me about",
+    ],
     providerCandidates: [
       {
         providerId: "builtin",
@@ -55,9 +67,27 @@ const CAPABILITIES = [
     id: "web.research",
     label: "Web research",
     description: "Find fresh public information on the web.",
-    keywords: ["latest", "news", "look up", "lookup", "research", "search", "check on", "release"],
-    phrases: ["look this up", "check on this", "what is the latest", "search the web"],
+    keywords: [
+      "latest",
+      "news",
+      "look up",
+      "lookup",
+      "research",
+      "search",
+      "check on",
+      "release",
+    ],
+    phrases: [
+      "look this up",
+      "check on this",
+      "what is the latest",
+      "search the web",
+    ],
     providerCandidates: [
+      {
+        providerId: "builtin",
+        toolId: "web-research",
+      },
       {
         providerId: "claw",
         packageId: "claw/web-research",
@@ -77,7 +107,14 @@ const CAPABILITIES = [
     id: "calendar.read",
     label: "Calendar access",
     description: "Read calendar availability and upcoming events.",
-    keywords: ["calendar", "schedule", "meeting", "tomorrow", "appointment", "free"],
+    keywords: [
+      "calendar",
+      "schedule",
+      "meeting",
+      "tomorrow",
+      "appointment",
+      "free",
+    ],
     phrases: ["check my calendar", "what is on my calendar", "am i free"],
     providerCandidates: [
       {
@@ -165,7 +202,9 @@ function normalizeLimit(value, fallback = 3) {
 
 function summarizeBuiltins(toolRegistry) {
   return new Set(
-    (toolRegistry?.listTools?.() || []).map((tool) => String(tool.id || "").trim()),
+    (toolRegistry?.listTools?.() || []).map((tool) =>
+      String(tool.id || "").trim(),
+    ),
   );
 }
 

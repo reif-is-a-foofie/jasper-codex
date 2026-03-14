@@ -1,13 +1,16 @@
 import { createToolRegistry } from "../../../jasper-tools/src/registry.js";
+import { generateToolFromTemplate } from "../../../jasper-tools/src/generator.js";
+import { createToolAcquisitionStore } from "./acquisition-store.js";
 import { createCapabilityRegistry } from "./capability-registry.js";
 import { listInternalAgents } from "./internal-agents.js";
 import { createProviderResolver } from "./provider-adapters.js";
+import { planToolAcquisition } from "./tool-acquisition-plan.js";
 
 function unique(values) {
   return [...new Set(values)];
 }
 
-function activeAgentIdsForResolution(resolution) {
+function activeAgentIdsForPlan(resolution, acquisition) {
   const active = ["harbor", "sounding", "logbook"];
   const status = resolution?.selected?.status;
 
@@ -21,6 +24,13 @@ function activeAgentIdsForResolution(resolution) {
 
   if (status === "available" || status === "provisionable") {
     active.push("helm");
+  }
+
+  if (
+    acquisition?.strategy === "search_and_quarantine" ||
+    acquisition?.strategy === "build_in_house"
+  ) {
+    active.push("dockyard", "breakwater");
   }
 
   return unique(active);
@@ -58,23 +68,113 @@ function publicSummaryForPlan(plan) {
   }
 }
 
+function summarizeTool(tool) {
+  if (!tool) {
+    return null;
+  }
+
+  return {
+    id: tool.id,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+  };
+}
+
+function defaultGeneratedToolId(record) {
+  return String(
+    record.primaryCapabilityId || record.requirement?.label || "jasper-tool",
+  )
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function createCapabilityBroker(options = {}) {
+  const registryOptions = {
+    identityPath: options.identityPath,
+    memoryRoot: options.memoryRoot,
+    jasperHome: options.jasperHome,
+    toolsRoot: options.toolsRoot,
+  };
   const toolRegistry =
-    options.toolRegistry ||
-    createToolRegistry({
-      identityPath: options.identityPath,
-      memoryRoot: options.memoryRoot,
+    options.toolRegistry || createToolRegistry(registryOptions);
+  const acquisitionStore =
+    options.acquisitionStore ||
+    createToolAcquisitionStore({
       jasperHome: options.jasperHome,
-      toolsRoot: options.toolsRoot,
     });
-  const capabilityRegistry = createCapabilityRegistry({ toolRegistry });
-  const providerResolver = createProviderResolver({
-    toolRegistry,
-    installedProviders: options.installedProviders,
-    approvedConnectors: options.approvedConnectors,
-    clawAutoProvision: options.clawAutoProvision,
-    mcpAutoProvision: options.mcpAutoProvision,
-  });
+  const installedProviders =
+    options.installedProviders ??
+    acquisitionStore
+      .listActivatedProviders({ limit: Number.MAX_SAFE_INTEGER })
+      .map((provider) => provider.id);
+  const capabilityRegistry =
+    options.capabilityRegistry || createCapabilityRegistry({ toolRegistry });
+  const providerResolver =
+    options.providerResolver ||
+    createProviderResolver({
+      toolRegistry,
+      installedProviders,
+      approvedConnectors: options.approvedConnectors,
+      clawAutoProvision: options.clawAutoProvision,
+      mcpAutoProvision: options.mcpAutoProvision,
+    });
+
+  function inspectRequest(query, inspectOptions = {}) {
+    const matches = capabilityRegistry.matchRequest(query, {
+      limit: inspectOptions.limit,
+    });
+    const capabilityPlans = matches.map((match) => {
+      const resolution = providerResolver.resolveCapability(match.capability);
+      const acquisition = planToolAcquisition(match.capability, resolution);
+      return {
+        capability: {
+          id: match.capability.id,
+          label: match.capability.label,
+          description: match.capability.description,
+        },
+        score: match.score,
+        matchedKeywords: match.matchedKeywords,
+        matchedPhrases: match.matchedPhrases,
+        resolution,
+        acquisition,
+        activeAgentIds: activeAgentIdsForPlan(resolution, acquisition),
+      };
+    });
+
+    const primaryPlan = capabilityPlans[0] || null;
+    const activeAgentIds = unique(
+      capabilityPlans.flatMap((plan) => plan.activeAgentIds),
+    );
+
+    return {
+      request: String(query || "").trim(),
+      acknowledgement: acknowledgementForResolution(primaryPlan?.resolution),
+      publicPlan: {
+        summary: publicSummaryForPlan(primaryPlan),
+        consentRequired:
+          primaryPlan?.resolution?.selected?.status === "consent_required",
+        autoProvision:
+          primaryPlan?.resolution?.selected?.status === "provisionable",
+        tooling: {
+          strategy: primaryPlan?.acquisition?.strategy || null,
+          quarantineRequired:
+            primaryPlan?.acquisition?.quarantine?.required || false,
+          buildRecommended:
+            primaryPlan?.acquisition?.build?.recommended || false,
+        },
+      },
+      internalPlan: {
+        activeAgents: listInternalAgents().filter((agent) =>
+          activeAgentIds.includes(agent.id),
+        ),
+        primaryCapabilityId: primaryPlan?.capability?.id || null,
+        primaryProvider: primaryPlan?.resolution?.selected || null,
+        acquisition: primaryPlan?.acquisition || null,
+        capabilities: capabilityPlans,
+      },
+    };
+  }
 
   return {
     listCapabilities() {
@@ -83,48 +183,128 @@ export function createCapabilityBroker(options = {}) {
     listInternalAgents() {
       return listInternalAgents();
     },
-    inspectRequest(query, options = {}) {
-      const matches = capabilityRegistry.matchRequest(query, {
-        limit: options.limit,
+    inspectRequest,
+    acquireRequest(query, requestOptions = {}) {
+      const plan = inspectRequest(query, requestOptions);
+      const acquisition = acquisitionStore.acquire(plan, {
+        source: requestOptions.source,
       });
-      const capabilityPlans = matches.map((match) => {
-        const resolution = providerResolver.resolveCapability(match.capability);
-        return {
-          capability: {
-            id: match.capability.id,
-            label: match.capability.label,
-            description: match.capability.description,
-          },
-          score: match.score,
-          matchedKeywords: match.matchedKeywords,
-          matchedPhrases: match.matchedPhrases,
-          resolution,
-          activeAgentIds: activeAgentIdsForResolution(resolution),
-        };
-      });
+      const nextAction = plan.internalPlan.acquisition?.nextAction || null;
+      const provider = plan.internalPlan.primaryProvider || null;
 
-      const primaryPlan = capabilityPlans[0] || null;
-      const activeAgentIds = unique(
-        capabilityPlans.flatMap((plan) => plan.activeAgentIds),
-      );
+      if (nextAction === "use_existing_tool") {
+        const tool = provider?.toolId
+          ? toolRegistry.getTool(provider.toolId)
+          : null;
+        return {
+          plan,
+          acquisition,
+          outcome: {
+            status: "ready",
+            action: nextAction,
+            provider,
+            tool: summarizeTool(tool),
+            executionMode: provider?.executionMode || null,
+          },
+        };
+      }
+
+      if (nextAction === "generate_local_tool") {
+        const template =
+          requestOptions.template ||
+          acquisition.build?.recommendedTemplates?.[0]?.id ||
+          null;
+        if (!template) {
+          return {
+            plan,
+            acquisition,
+            outcome: {
+              status: "build_required",
+              action: "build_local_tool",
+              provider,
+              build: acquisition.build,
+            },
+          };
+        }
+
+        const generation = generateToolFromTemplate({
+          id: requestOptions.id || defaultGeneratedToolId(acquisition),
+          template,
+          description:
+            requestOptions.description ||
+            `${acquisition.requirement?.label || "Jasper"} tool`,
+          toolsRoot: options.toolsRoot,
+          query: requestOptions.query || acquisition.request,
+          limit: requestOptions.limit,
+          type: requestOptions.type,
+          source: requestOptions.source,
+        });
+        const updatedAcquisition = acquisitionStore.recordGeneratedBuild(
+          acquisition.id,
+          generation,
+        );
+        const refreshedRegistry = createToolRegistry(registryOptions);
+        return {
+          plan,
+          acquisition: updatedAcquisition,
+          outcome: {
+            status: "generated",
+            action: nextAction,
+            provider,
+            generation,
+            tool: summarizeTool(refreshedRegistry.getTool(generation.spec.id)),
+          },
+        };
+      }
+
+      if (nextAction === "request_connector_consent") {
+        return {
+          plan,
+          acquisition,
+          outcome: {
+            status: "awaiting_consent",
+            action: nextAction,
+            provider,
+            connectorId: provider?.connectorId || null,
+          },
+        };
+      }
+
+      if (nextAction === "queue_quarantine_review") {
+        return {
+          plan,
+          acquisition,
+          outcome: {
+            status: "quarantine_pending",
+            action: nextAction,
+            provider,
+            candidates: acquisition.candidates.filter(
+              (candidate) => candidate.status === "pending_quarantine",
+            ),
+          },
+        };
+      }
+
+      if (nextAction === "build_local_tool") {
+        return {
+          plan,
+          acquisition,
+          outcome: {
+            status: "build_required",
+            action: nextAction,
+            provider,
+            build: acquisition.build,
+          },
+        };
+      }
 
       return {
-        request: String(query || "").trim(),
-        acknowledgement: acknowledgementForResolution(primaryPlan?.resolution),
-        publicPlan: {
-          summary: publicSummaryForPlan(primaryPlan),
-          consentRequired:
-            primaryPlan?.resolution?.selected?.status === "consent_required",
-          autoProvision:
-            primaryPlan?.resolution?.selected?.status === "provisionable",
-        },
-        internalPlan: {
-          activeAgents: listInternalAgents().filter((agent) =>
-            activeAgentIds.includes(agent.id),
-          ),
-          primaryCapabilityId: primaryPlan?.capability?.id || null,
-          primaryProvider: primaryPlan?.resolution?.selected || null,
-          capabilities: capabilityPlans,
+        plan,
+        acquisition,
+        outcome: {
+          status: "planned",
+          action: nextAction,
+          provider,
         },
       };
     },
