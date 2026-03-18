@@ -7,7 +7,7 @@
   Jasper's north star is simple: if you can do <code>X</code> alone, you should be able to do <code>2X</code> with Jasper.
 </p>
 <p align="center">
-  The model is the substrate. Jasper is the product: a co-founder for life, a persistent brain in a box.
+  The model is the substrate. Jasper is the product: a co-founder for life, a persistent brain in a box that can learn, heal, and upgrade itself.
 </p>
 
 ---

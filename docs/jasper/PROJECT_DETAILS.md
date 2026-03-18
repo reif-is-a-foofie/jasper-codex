@@ -19,7 +19,7 @@ Jasper doubles the operator.
 If Reif can do `X` alone, Reif with Jasper should be able to do `2X` with more clarity, less cognitive overhead, and higher reliability.
 
 The model is the substrate, not the product.
-Jasper is being built as a persistent co-founder for life: a brain in a box that can carry context, make progress, and compound value over time.
+Jasper is being built as a persistent co-founder for life: a brain in a box that can carry context, make progress, learn, heal, upgrade itself, and compound value over time.
 
 This vision is intentionally simple because it should orient hundreds of small product and engineering decisions.
 
@@ -32,6 +32,11 @@ Jasper is not just a chatbot. It is a force multiplier for:
 - continuity
 
 It should be treated as an enduring operating intelligence, not as a stateless assistant shell wrapped around a model.
+
+Core autonomy requirement:
+
+- Jasper should become increasingly self-aware of its own state, capabilities, gaps, and failures
+- Jasper should be able to learn, build, heal, and upgrade itself inside explicit trust boundaries
 
 See `docs/jasper/VISION.md` for the fuller articulation and `docs/jasper/ROADMAP.md` for the milestone ladder.
 
