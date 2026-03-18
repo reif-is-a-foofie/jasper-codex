@@ -19,6 +19,7 @@ import { createCapabilityBroker } from "./broker/index.js";
 import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
 import { createJasperRuntime } from "./runtime.js";
 import { createDigestReporter } from "./digest.js";
+import { createWorkflowManager } from "./workflows.js";
 
 function printUsage() {
   process.stdout.write(`Usage:
@@ -61,6 +62,8 @@ function printUsage() {
   node jasper-agent/src/cli.js broker capabilities
   node jasper-agent/src/cli.js broker inspect QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
   node jasper-agent/src/cli.js digest [STAGE] [--lookback-hours N] [--event-limit N] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js workflows list [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js workflows run WORKFLOW_ID [--stage NAME] [--auto-approve] [--jasper-home PATH] [--memory-root PATH]
 `);
 }
 
@@ -203,6 +206,15 @@ function parseArgs(argv) {
     }
     if (arg === "--device-auth") {
       options.deviceAuth = true;
+      continue;
+    }
+    if (arg === "--stage") {
+      options.stage = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--auto-approve") {
+      options.autoApprove = true;
       continue;
     }
     options.positionals.push(arg);
@@ -725,6 +737,37 @@ async function main() {
           limit: brokerOptions.limit,
         }),
       );
+      return;
+    }
+
+    printUsage();
+    return;
+  }
+
+  if (command === "workflows") {
+    const [workflowCommand, ...workflowArgs] = rest;
+    const workflowOptions = parseArgs(workflowArgs);
+    const manager = createWorkflowManager({
+      memoryRoot: workflowOptions.memoryRoot || options.memoryRoot,
+      jasperHome: workflowOptions.jasperHome || options.jasperHome,
+    });
+
+    if (workflowCommand === "list") {
+      printJson(manager.listWorkflows());
+      return;
+    }
+
+    if (workflowCommand === "run") {
+      const [workflowId] = workflowOptions.positionals;
+      if (!workflowId) {
+        throw new Error("Workflows run requires a WORKFLOW_ID");
+      }
+      const result = await manager.runWorkflow({
+        workflowId,
+        stage: workflowOptions.stage,
+        autoApprove: Boolean(workflowOptions.autoApprove),
+      });
+      printJson(result);
       return;
     }
 

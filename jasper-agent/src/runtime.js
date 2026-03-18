@@ -4,6 +4,7 @@ import { createEventStore } from "../../jasper-memory/src/event-store.js";
 import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
 import { createEnvironmentListeners } from "./listeners/index.js";
 import { createDigestReporter } from "./digest.js";
+import { createWorkflowManager } from "./workflows.js";
 
 function nowIso() {
   return new Date().toISOString();
@@ -60,6 +61,23 @@ export class JasperRuntime {
     this.running = false;
     this.sessionId = options.sessionId || `runtime_${randomUUID()}`;
     this.tickCount = 0;
+    this.workflowManager =
+      options.workflowManager ||
+      createWorkflowManager({
+        memory: this.memory,
+        jasperHome: options.jasperHome,
+      });
+    this.workflowSchedules = Array.isArray(options.workflowSchedules)
+      ? options.workflowSchedules
+      : [
+          {
+            workflowId: "daily-plan",
+            stage: "scheduled",
+            intervalMs: 12 * 60 * 60 * 1000,
+            autoApprove: false,
+          },
+        ];
+    this.workflowScheduleState = new Map();
     this.digestStages =
       Array.isArray(options.digestStages) && options.digestStages.length > 0
         ? options.digestStages
@@ -223,6 +241,65 @@ export class JasperRuntime {
     }
   }
 
+  async runScheduledWorkflows() {
+    if (!this.workflowManager || this.workflowSchedules.length === 0) {
+      return;
+    }
+
+    const now = Date.now();
+    for (const schedule of this.workflowSchedules) {
+      const intervalMs = Math.max(0, Number(schedule.intervalMs || 0));
+      if (intervalMs <= 0) {
+        continue;
+      }
+
+      const state =
+        this.workflowScheduleState.get(schedule.workflowId) || {
+          lastRun: 0,
+        };
+      if (now - state.lastRun < intervalMs) {
+        continue;
+      }
+
+      try {
+        const result = await this.workflowManager.runWorkflow({
+          workflowId: schedule.workflowId,
+          stage: schedule.stage,
+          autoApprove: Boolean(schedule.autoApprove),
+        });
+
+        this.record(
+          "workflow.execution",
+          {
+            workflowId: result.workflowId,
+            stage: result.stage,
+            status: result.status,
+            steps: result.steps,
+          },
+          {
+            tags: ["workflow", "schedule"],
+          },
+        );
+
+        this.workflowScheduleState.set(schedule.workflowId, {
+          lastRun: now,
+          lastStatus: result.status,
+        });
+      } catch (error) {
+        this.record(
+          "workflow.execution.failed",
+          {
+            workflowId: schedule.workflowId,
+            reason: error instanceof Error ? error.message : String(error),
+          },
+          {
+            tags: ["workflow", "schedule", "error"],
+          },
+        );
+      }
+    }
+  }
+
   async start() {
     if (this.running) {
       throw new Error("Jasper runtime is already running");
@@ -331,6 +408,8 @@ export class JasperRuntime {
         this.digestStageIndex =
           (this.digestStageIndex + 1) % this.digestStages.length;
       }
+
+      await this.runScheduledWorkflows();
 
       if (this.maxTicks !== null && this.tickCount >= this.maxTicks) {
         this.stop("max_ticks_reached");

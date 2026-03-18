@@ -96,7 +96,7 @@ This region turns perception and memory into plans, tool calls, workflows, and d
 
 3. **Milestone 3: Tool Framework** — Status: complete. Outcome: Jasper-owned tool registry and built-in tools.
 7. **Milestone 7: Capability Brokerage And Tool Acquisition** — Status: active foundation. Outcome: outcome-oriented request routing, tool planning, after-turn intake, and self-extension queueing.
-11. **Milestone 11: Workflow Automation And Delegation** — Status: planned. Outcome: repeated work becomes reusable Jasper workflows with approvals and checkpoints.
+11. **Milestone 11: Workflow Automation And Delegation** — Status: active. Outcome: repeated work becomes reusable Jasper workflows with approvals and checkpoints; CLI commands (`jasper workflows list/run`) plus runtime scheduling surface the same multi-step routines.
 15. **Milestone 15: Computer-Use Delegation** — Status: planned. Outcome: Jasper can drive browser and desktop tasks under explicit guardrails instead of just discussing them.
 16. **Milestone 16: Communications Chief Of Staff** — Status: planned. Outcome: Jasper drafts, triages, follows up, and manages communication loops, including email and meetings.
 17. **Milestone 17: Finance And Household Operations** — Status: planned. Outcome: Jasper tracks bills, subscriptions, purchases, and recurring obligations with approval-aware execution.
