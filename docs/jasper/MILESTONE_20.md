@@ -1,5 +1,9 @@
 # Jasper Milestone 20
 
+## Primary Brain Region
+
+Perception & Attention.
+
 ## Objective
 
 Make Jasper useful away from the terminal through mobile capture, alerting, and interrupt intelligence.

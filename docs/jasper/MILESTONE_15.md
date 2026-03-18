@@ -1,5 +1,9 @@
 # Jasper Milestone 15
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Let Jasper perform real browser and desktop work under explicit operator guardrails.

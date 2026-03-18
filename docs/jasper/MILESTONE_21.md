@@ -1,5 +1,9 @@
 # Jasper Milestone 21
 
+## Primary Brain Region
+
+Regulation & Growth.
+
 ## Objective
 
 Build the trust layer Jasper needs before autonomy expands further.

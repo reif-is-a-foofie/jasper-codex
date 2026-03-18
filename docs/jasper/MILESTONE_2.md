@@ -1,5 +1,9 @@
 # Jasper Milestone 2
 
+## Primary Brain Region
+
+Memory & World Model.
+
 ## Objective
 
 Establish the first persistent Jasper memory layer without increasing merge pressure on upstream Codex.

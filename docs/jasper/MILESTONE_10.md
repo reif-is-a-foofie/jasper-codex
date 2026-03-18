@@ -1,5 +1,9 @@
 # Jasper Milestone 10
 
+## Primary Brain Region
+
+Perception & Attention.
+
 ## Objective
 
 Move Jasper from a session-only assistant into a continuously observing system that produces proactive daily value.

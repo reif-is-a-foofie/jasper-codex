@@ -1,5 +1,9 @@
 # Jasper Milestone 18
 
+## Primary Brain Region
+
+Memory & World Model.
+
 ## Objective
 
 Ground Jasper in the operator's documents, notes, and records so it can reason from real source material.

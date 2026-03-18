@@ -1,5 +1,9 @@
 # Jasper Milestone 7
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Make Jasper reason about capabilities instead of tool names, and let it queue self-extension work while the user is still talking.

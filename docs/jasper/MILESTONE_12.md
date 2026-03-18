@@ -1,5 +1,9 @@
 # Jasper Milestone 12
 
+## Primary Brain Region
+
+Perception & Attention.
+
 ## Objective
 
 Make Jasper a trusted guardian that detects important anomalies and escalates them with useful context.

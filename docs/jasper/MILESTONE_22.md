@@ -1,5 +1,9 @@
 # Jasper Milestone 22
 
+## Primary Brain Region
+
+Regulation & Growth.
+
 ## Objective
 
 Turn Jasper into an extensible platform with installable skills, apps, and packaged integrations.

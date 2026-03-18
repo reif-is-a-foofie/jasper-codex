@@ -1,5 +1,9 @@
 # Jasper Milestone 4
 
+## Primary Brain Region
+
+Perception & Attention.
+
 ## Objective
 
 Make Jasper environment-aware by introducing listener-driven observation that automatically writes to memory.

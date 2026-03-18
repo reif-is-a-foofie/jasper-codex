@@ -9,6 +9,9 @@ If Reif can do `X` alone, Reif with Jasper should be able to do `2X` because Jas
 Jasper is not the language model itself. The language model is a core substrate.
 The product goal is to build a co-founder for life: a persistent brain in a box that can think, remember, orient, act, learn, heal, upgrade itself, and stay with the operator across years.
 
+That means Jasper must be built around core functional regions, not around downloaded information alone.
+The five-region architecture is defined in `docs/jasper/BRAIN_REGIONS.md`.
+
 That doubling should show up in:
 
 - clarity

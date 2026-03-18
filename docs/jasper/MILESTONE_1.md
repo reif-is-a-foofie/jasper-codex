@@ -1,5 +1,9 @@
 # Jasper Milestone 1
 
+## Primary Brain Region
+
+Self Model.
+
 ## Scope
 
 Build the initial Jasper system skeleton with Jasper-specific code kept outside upstream Codex wherever possible.

@@ -1,5 +1,9 @@
 # Jasper Milestone 29
 
+## Primary Brain Region
+
+Regulation & Growth.
+
 ## Objective
 
 Extend Jasper beyond one household into federated coordination across trusted teams and domains.

@@ -1,5 +1,9 @@
 # Jasper Milestone 27
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Scale Jasper from one reasoning stream into a supervised network of specialized agent workers.

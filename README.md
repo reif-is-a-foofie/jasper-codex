@@ -9,6 +9,9 @@
 <p align="center">
   The model is the substrate. Jasper is the product: a co-founder for life, a persistent brain in a box that can learn, heal, and upgrade itself.
 </p>
+<p align="center">
+  Jasper is now organized around five brain regions: Self Model, Perception &amp; Attention, Memory &amp; World Model, Executive &amp; Action, and Regulation &amp; Growth.
+</p>
 
 ---
 
@@ -78,6 +81,7 @@ jasper
 
 - [**Jasper PRD**](./docs/jasper/PROJECT_DETAILS.md)
 - [**Jasper Vision**](./docs/jasper/VISION.md)
+- [**Jasper Brain Regions**](./docs/jasper/BRAIN_REGIONS.md)
 - [**Jasper Roadmap**](./docs/jasper/ROADMAP.md)
 - [**Jasper Onboarding**](./docs/jasper/AUTOMATIC_ONBOARDING.md)
 - [**Jasper Tool Acquisition**](./docs/jasper/TOOL_ACQUISITION.md)

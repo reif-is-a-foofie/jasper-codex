@@ -1,5 +1,9 @@
 # Jasper Milestone 30
 
+## Primary Brain Region
+
+Regulation & Growth.
+
 ## Objective
 
 Make Jasper a self-sustaining personal intelligence system that compounds operator capability over years.

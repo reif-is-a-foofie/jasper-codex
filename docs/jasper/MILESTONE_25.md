@@ -1,5 +1,9 @@
 # Jasper Milestone 25
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Make Jasper a genuine strategic planning engine, not just a fast operator console.

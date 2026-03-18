@@ -38,6 +38,22 @@ Core autonomy requirement:
 - Jasper should become increasingly self-aware of its own state, capabilities, gaps, and failures
 - Jasper should be able to learn, build, heal, and upgrade itself inside explicit trust boundaries
 
+## Brain Architecture Rule
+
+Jasper should not be built as a container for downloaded information.
+
+Jasper should be built as a brain-like system with core regions and functions that can later accumulate knowledge, skill, and judgment.
+
+The five core regions are:
+
+1. Self Model
+2. Perception & Attention
+3. Memory & World Model
+4. Executive & Action
+5. Regulation & Growth
+
+See `docs/jasper/BRAIN_REGIONS.md` for the canonical definition.
+
 See `docs/jasper/VISION.md` for the fuller articulation and `docs/jasper/ROADMAP.md` for the milestone ladder.
 
 ## Product Decision Rule

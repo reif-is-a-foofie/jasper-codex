@@ -1,5 +1,9 @@
 # Jasper Milestone 26
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Let Jasper manage outside services and negotiations with structured operator oversight.

@@ -1,5 +1,9 @@
 # Jasper Milestone 19
 
+## Primary Brain Region
+
+Memory & World Model.
+
 ## Objective
 
 Expand Jasper from a single-operator tool into a true household coordination system.

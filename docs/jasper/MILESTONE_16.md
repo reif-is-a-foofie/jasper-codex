@@ -1,5 +1,9 @@
 # Jasper Milestone 16
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Make Jasper the operator's communications chief of staff across inboxes, messages, and meetings.

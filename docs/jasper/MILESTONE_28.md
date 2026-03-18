@@ -1,5 +1,9 @@
 # Jasper Milestone 28
 
+## Primary Brain Region
+
+Memory & World Model.
+
 ## Objective
 
 Give Jasper a usable model of the operator's world so it can simulate options before acting.

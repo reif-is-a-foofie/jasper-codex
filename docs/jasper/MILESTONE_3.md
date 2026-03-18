@@ -1,5 +1,9 @@
 # Jasper Milestone 3
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Give Jasper a standalone tool framework that can execute modular actions without depending on upstream Codex internals.

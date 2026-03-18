@@ -1,5 +1,9 @@
 # Jasper Milestone 11
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Turn repeated work into reusable Jasper workflows so the system compounds operator throughput instead of only answering one-off prompts.

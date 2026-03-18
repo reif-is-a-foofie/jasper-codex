@@ -1,5 +1,9 @@
 # Jasper Milestone 23
 
+## Primary Brain Region
+
+Regulation & Growth.
+
 ## Objective
 
 Give Jasper a self-evaluation and self-correction loop that catches drift before it becomes user-visible failure.

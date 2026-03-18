@@ -1,5 +1,9 @@
 # Jasper Milestone 5
 
+## Primary Brain Region
+
+Memory & World Model.
+
 ## Objective
 
 Introduce a first dream-state system that turns recent memory events into higher-level reflections and reusable clusters.

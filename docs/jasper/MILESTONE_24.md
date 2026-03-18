@@ -1,5 +1,9 @@
 # Jasper Milestone 24
 
+## Primary Brain Region
+
+Regulation & Growth.
+
 ## Objective
 
 Package Jasper as a dependable local appliance rather than a developer-managed stack.

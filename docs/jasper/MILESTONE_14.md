@@ -1,5 +1,9 @@
 # Jasper Milestone 14
 
+## Primary Brain Region
+
+Self Model.
+
 ## Objective
 
 Make Jasper the operator's default household command center rather than a tool that must be remembered occasionally.

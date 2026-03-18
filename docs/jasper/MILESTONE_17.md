@@ -1,5 +1,9 @@
 # Jasper Milestone 17
 
+## Primary Brain Region
+
+Executive & Action.
+
 ## Objective
 
 Give Jasper real leverage over finance and household operations while preserving approval boundaries.

@@ -1,5 +1,9 @@
 # Jasper Milestone 13
 
+## Primary Brain Region
+
+Memory & World Model.
+
 ## Objective
 
 Give Jasper durable strategic memory so long-horizon goals, commitments, and constraints stay coherent across weeks and months.

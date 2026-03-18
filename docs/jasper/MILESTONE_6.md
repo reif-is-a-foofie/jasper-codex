@@ -1,5 +1,9 @@
 # Jasper Milestone 6
 
+## Primary Brain Region
+
+Regulation & Growth.
+
 ## Objective
 
 Start Jasper self-extension by letting the system generate and register new tools from repeatable templates.
