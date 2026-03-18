@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { approveConnector } from "./apps.js";
 import { createEventStore } from "../../jasper-memory/src/event-store.js";
 import { createToolAcquisitionStore } from "./broker/acquisition-store.js";
 import { processAfterTurn } from "./after-turn.js";
@@ -106,4 +107,44 @@ test("after-turn intake avoids duplicating the same pending acquisition", () => 
 
   assert.equal(records.length, 1);
   assert.equal(records[0].status, "quarantine_pending");
+});
+
+test("after-turn intake records activation work for approved connectors", () => {
+  const jasperHome = fs.mkdtempSync(path.join(os.tmpdir(), "jasper-after-turn-active-"));
+  const identityPath = createIdentityPath();
+  approveConnector({
+    jasperHome,
+    connectorId: "calendar",
+  });
+
+  const result = processAfterTurn(
+    {
+      type: "agent-turn-complete",
+      "input-messages": ["check my calendar tomorrow"],
+    },
+    {
+      jasperHome,
+      identityPath,
+      maintenanceLimit: 1,
+    },
+  );
+
+  const acquisitionStore = createToolAcquisitionStore({ jasperHome });
+  const records = acquisitionStore.listAcquisitions({
+    limit: Number.MAX_SAFE_INTEGER,
+  });
+  const events = createEventStore({ jasperHome }).listRecentEvents({
+    limit: 20,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].status, "activation_pending");
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type === "tooling.acquire.pending" &&
+        String(event.payload.summary).includes("needs the connector activated"),
+    ),
+  );
 });

@@ -9,6 +9,8 @@ function normalizeSet(values = []) {
 function statusRank(status) {
   switch (status) {
     case "available":
+      return 5;
+    case "activation_required":
       return 4;
     case "consent_required":
       return 3;
@@ -49,16 +51,26 @@ function resolveBuiltinCandidate(candidate, context) {
 
 function resolveConnectorCandidate(candidate, context) {
   const connectorId = String(candidate.connectorId || "").trim();
-  const approved =
-    context.approvedConnectors.has(connectorId) ||
+  const active =
+    context.activeConnectors.has(connectorId) ||
     context.installedProviders.has(`connector:${connectorId}`);
+  const approved = context.approvedConnectors.has(connectorId) || active;
 
-  if (approved) {
+  if (active) {
     return {
       ...candidate,
       status: "available",
       action: "use",
-      reason: `Connector "${connectorId}" is approved for Jasper use.`,
+      reason: `Connector "${connectorId}" is active and ready for Jasper use.`,
+    };
+  }
+
+  if (approved) {
+    return {
+      ...candidate,
+      status: "activation_required",
+      action: "activate",
+      reason: `Connector "${connectorId}" is approved, but it is not active yet.`,
     };
   }
 
@@ -123,6 +135,7 @@ export function createProviderResolver(options = {}) {
     toolRegistry: options.toolRegistry,
     installedProviders: normalizeSet(options.installedProviders),
     approvedConnectors: normalizeSet(options.approvedConnectors),
+    activeConnectors: normalizeSet(options.activeConnectors),
     clawAutoProvision: options.clawAutoProvision !== false,
     mcpAutoProvision: options.mcpAutoProvision !== false,
   };

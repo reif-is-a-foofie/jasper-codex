@@ -24,6 +24,10 @@ function statusForRecord(record) {
     return "consent_required";
   }
 
+  if (record.status === "activation_pending") {
+    return "approved_not_active";
+  }
+
   if (
     record.status === "satisfied" ||
     record.primaryProvider?.status === "available"
@@ -97,9 +101,29 @@ function summarizeConnectors(records) {
       latestRequestAt: summary.latestRequestAt,
       requestedCapabilities: [...summary.requestedCapabilities].sort(),
       recentRequests: summary.recentRequests,
+      needsAttention:
+        summary.requestCount > 0 &&
+        (summary.status === "consent_required" ||
+          summary.status === "approved_not_active"),
       terminalCommand: "jasper apps",
     }))
     .sort(sortByMostRecent);
+}
+
+function connectorStatusFromState(state, existing) {
+  if (state.runtimeStatus === "active") {
+    return "ready";
+  }
+
+  if (state.consentStatus === "approved") {
+    return "approved_not_active";
+  }
+
+  if (state.consentStatus === "revoked") {
+    return existing?.requestCount > 0 ? "consent_required" : "revoked";
+  }
+
+  return existing?.status || "tracked";
 }
 
 function mergeConnectorStates(records, connectorStates) {
@@ -109,20 +133,25 @@ function mergeConnectorStates(records, connectorStates) {
 
   for (const state of connectorStates) {
     const existing = summaries.get(state.id);
+    const connectorStatus = connectorStatusFromState(state, existing);
     summaries.set(state.id, {
       id: state.id,
       label: existing?.label || connectorLabel(state.id),
-      status:
-        state.status === "approved"
-          ? "approved"
-          : existing?.status || "tracked",
-      consentStatus: state.status,
+      status: connectorStatus,
+      consentStatus: state.consentStatus || "unknown",
+      runtimeStatus: state.runtimeStatus || "inactive",
       approvedAt: state.approvedAt || null,
       revokedAt: state.revokedAt || null,
+      activatedAt: state.activatedAt || null,
+      deactivatedAt: state.deactivatedAt || null,
       latestRequestAt: existing?.latestRequestAt || null,
       requestCount: existing?.requestCount || 0,
       requestedCapabilities: existing?.requestedCapabilities || [],
       recentRequests: existing?.recentRequests || [],
+      needsAttention:
+        (existing?.requestCount || 0) > 0 &&
+        (connectorStatus === "consent_required" ||
+          connectorStatus === "approved_not_active"),
       terminalCommand: "jasper apps",
     });
   }
@@ -132,9 +161,21 @@ function mergeConnectorStates(records, connectorStates) {
       ...connector,
       consentStatus:
         connector.consentStatus ||
-        (connector.status === "approved" ? "approved" : "not_approved"),
+        (connector.status === "approved_not_active" ||
+        connector.status === "ready"
+          ? "approved"
+          : "not_approved"),
+      runtimeStatus:
+        connector.runtimeStatus ||
+        (connector.status === "ready" ? "active" : "inactive"),
       approvedAt: connector.approvedAt || null,
       revokedAt: connector.revokedAt || null,
+      activatedAt: connector.activatedAt || null,
+      deactivatedAt: connector.deactivatedAt || null,
+      needsAttention:
+        connector.requestCount > 0 &&
+        (connector.status === "consent_required" ||
+          connector.status === "approved_not_active"),
     }))
     .sort(sortByMostRecent);
 }
@@ -154,17 +195,33 @@ export function getJasperAppStatus(options = {}) {
     connectorStore.listConnectorStates(),
   );
   const pendingConnectors = connectors.filter(
+    (connector) => connector.needsAttention,
+  );
+  const blockedForConsent = pendingConnectors.filter(
     (connector) => connector.status === "consent_required",
+  );
+  const blockedForActivation = pendingConnectors.filter(
+    (connector) => connector.status === "approved_not_active",
   );
 
   const warnings = [];
   const nextSteps = [];
   if (pendingConnectors.length > 0) {
     warnings.push(
-      `${pendingConnectors.length} connector request${pendingConnectors.length === 1 ? "" : "s"} ${pendingConnectors.length === 1 ? "is" : "are"} waiting on consent or setup.`,
+      `${pendingConnectors.length} connector request${pendingConnectors.length === 1 ? "" : "s"} ${pendingConnectors.length === 1 ? "is" : "are"} still blocked by consent or activation.`,
     );
     nextSteps.push(
       "Run `jasper apps` to review which connectors Jasper is waiting on and which requests are blocked.",
+    );
+  }
+  if (blockedForConsent.length > 0) {
+    nextSteps.push(
+      "Use `jasper apps approve CONNECTOR_ID` to approve a blocked connector.",
+    );
+  }
+  if (blockedForActivation.length > 0) {
+    nextSteps.push(
+      "Use `jasper apps activate CONNECTOR_ID` after approval to make a connector runnable.",
     );
   }
 
@@ -172,7 +229,7 @@ export function getJasperAppStatus(options = {}) {
     status: pendingConnectors.length > 0 ? "needs_attention" : "ready",
     summary:
       pendingConnectors.length > 0
-        ? `Jasper is waiting on ${pendingConnectors.length} connector consent or setup path${pendingConnectors.length === 1 ? "" : "s"}.`
+        ? `Jasper is waiting on ${pendingConnectors.length} connector consent or activation path${pendingConnectors.length === 1 ? "" : "s"}.`
         : "No pending connector requests are blocking Jasper.",
     terminalCommand: "jasper apps",
     connectors,
@@ -220,6 +277,45 @@ export function approveConnector(options = {}) {
   };
 }
 
+export function activateConnector(options = {}) {
+  const connectorStore =
+    options.connectorStore ||
+    createConnectorStore({ jasperHome: options.jasperHome });
+  const connectorId = normalizeText(options.connectorId);
+  if (!connectorId) {
+    throw new Error("Connector activation requires a connector id");
+  }
+
+  const state = connectorStore.activateConnector(connectorId, options.note);
+  const memory =
+    options.memory ||
+    createEventStore({
+      root: options.memoryRoot,
+      jasperHome: options.jasperHome,
+      source: "jasper-apps",
+    });
+  const event = memory.appendEvent({
+    type: "connector.activated",
+    source: "jasper-apps",
+    tags: ["connector", "activation", "apps"],
+    payload: {
+      connectorId,
+      activatedAt: state?.activatedAt || null,
+      note: options.note ? String(options.note) : null,
+    },
+  });
+
+  return {
+    connector: state,
+    event,
+    apps: getJasperAppStatus({
+      jasperHome: options.jasperHome,
+      acquisitionStore: options.acquisitionStore,
+      connectorStore,
+    }),
+  };
+}
+
 export function revokeConnector(options = {}) {
   const connectorStore =
     options.connectorStore ||
@@ -244,6 +340,45 @@ export function revokeConnector(options = {}) {
     payload: {
       connectorId,
       revokedAt: state?.revokedAt || null,
+      note: options.note ? String(options.note) : null,
+    },
+  });
+
+  return {
+    connector: state,
+    event,
+    apps: getJasperAppStatus({
+      jasperHome: options.jasperHome,
+      acquisitionStore: options.acquisitionStore,
+      connectorStore,
+    }),
+  };
+}
+
+export function deactivateConnector(options = {}) {
+  const connectorStore =
+    options.connectorStore ||
+    createConnectorStore({ jasperHome: options.jasperHome });
+  const connectorId = normalizeText(options.connectorId);
+  if (!connectorId) {
+    throw new Error("Connector deactivation requires a connector id");
+  }
+
+  const state = connectorStore.deactivateConnector(connectorId, options.note);
+  const memory =
+    options.memory ||
+    createEventStore({
+      root: options.memoryRoot,
+      jasperHome: options.jasperHome,
+      source: "jasper-apps",
+    });
+  const event = memory.appendEvent({
+    type: "connector.deactivated",
+    source: "jasper-apps",
+    tags: ["connector", "activation", "apps"],
+    payload: {
+      connectorId,
+      deactivatedAt: state?.deactivatedAt || null,
       note: options.note ? String(options.note) : null,
     },
   });

@@ -10,6 +10,7 @@ import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
 
 const PENDING_STATUSES = new Set([
   "awaiting_consent",
+  "activation_pending",
   "quarantine_pending",
   "build_recommended",
   "planned",
@@ -116,6 +117,11 @@ function summarizeOutcome(result) {
       return {
         type: "tooling.acquire.pending",
         summary: `Jasper identified a ${capabilityLabel.toLowerCase()} path and is waiting for user consent before using it.`,
+      };
+    case "activation_pending":
+      return {
+        type: "tooling.acquire.pending",
+        summary: `Jasper has approval for ${capabilityLabel.toLowerCase()} but still needs the connector activated before using it.`,
       };
     case "quarantine_pending":
       return {

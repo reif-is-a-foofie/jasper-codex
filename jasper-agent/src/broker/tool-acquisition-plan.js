@@ -51,7 +51,10 @@ function searchChannelsForCapability(resolution) {
           trust: "consent_gated",
           quarantineRequired: false,
           status: candidate.status,
-          reason: `Use the ${candidate.connectorId} connector only with operator consent.`,
+          reason:
+            candidate.status === "activation_required"
+              ? `The ${candidate.connectorId} connector is approved and needs activation before Jasper can use it.`
+              : `Use the ${candidate.connectorId} connector only with operator consent.`,
         });
         break;
       case "claw":
@@ -124,6 +127,10 @@ function acquisitionStrategyForResolution(resolution) {
     return "request_consent";
   }
 
+  if (selected?.status === "activation_required") {
+    return "activate_connector";
+  }
+
   if (selected?.status === "available") {
     return "use_existing";
   }
@@ -173,6 +180,8 @@ function nextActionForPlan(strategy, quarantineRequired, build) {
       return "use_existing_tool";
     case "request_consent":
       return "request_connector_consent";
+    case "activate_connector":
+      return "activate_connector_runtime";
     case "build_in_house":
       return build.strategy === "generate_from_template"
         ? "generate_local_tool"

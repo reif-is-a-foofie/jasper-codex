@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { approveConnector } from "./apps.js";
 import { createToolAcquisitionStore } from "./broker/acquisition-store.js";
 import { createCapabilityBroker } from "./broker/index.js";
 
@@ -102,6 +103,25 @@ test("acquireRequest persists consent-gated requests without forcing execution",
 
   assert.equal(result.acquisition.status, "awaiting_consent");
   assert.equal(result.outcome.status, "awaiting_consent");
+  assert.equal(result.outcome.connectorId, "calendar");
+});
+
+test("acquireRequest tracks approved connectors that still need activation", () => {
+  const jasperHome = createJasperHome();
+  approveConnector({
+    jasperHome,
+    connectorId: "calendar",
+  });
+  const broker = createCapabilityBroker({ jasperHome });
+
+  const result = broker.acquireRequest(
+    "check my calendar for tomorrow morning",
+  );
+
+  assert.equal(result.plan.internalPlan.primaryProvider.status, "activation_required");
+  assert.equal(result.plan.internalPlan.acquisition.strategy, "activate_connector");
+  assert.equal(result.acquisition.status, "activation_pending");
+  assert.equal(result.outcome.status, "activation_pending");
   assert.equal(result.outcome.connectorId, "calendar");
 });
 

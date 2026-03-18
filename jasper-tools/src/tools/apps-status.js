@@ -3,7 +3,7 @@ import { getJasperAppStatus } from "../../../jasper-agent/src/apps.js";
 export function createAppsStatusTool(context) {
   return {
     id: "apps-status",
-    description: "Return pending Jasper connector and app requests.",
+    description: "Return Jasper connector approval, activation, and app-request status.",
     inputSchema: {
       type: "object",
       properties: {},

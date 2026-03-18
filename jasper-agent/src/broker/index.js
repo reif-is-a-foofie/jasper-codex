@@ -23,6 +23,10 @@ function activeAgentIdsForPlan(resolution, acquisition) {
     active.push("breakwater");
   }
 
+  if (status === "activation_required") {
+    active.push("breakwater");
+  }
+
   if (status === "available" || status === "provisionable") {
     active.push("helm");
   }
@@ -42,6 +46,8 @@ function acknowledgementForResolution(resolution) {
   switch (status) {
     case "available":
       return "Let me check on that.";
+    case "activation_required":
+      return "I can check that once the connection is activated.";
     case "provisionable":
       return "Let me set that up and check on it.";
     case "consent_required":
@@ -60,6 +66,8 @@ function publicSummaryForPlan(plan) {
   switch (selected.status) {
     case "available":
       return "Jasper can handle this immediately with an available capability.";
+    case "activation_required":
+      return "Jasper has approval for this connector but still needs it activated before use.";
     case "provisionable":
       return "Jasper can provision a trusted capability and then handle the request.";
     case "consent_required":
@@ -119,6 +127,11 @@ export function createCapabilityBroker(options = {}) {
     connectorStore
       .listApprovedConnectors()
       .map((connector) => connector.id);
+  const activeConnectors =
+    options.activeConnectors ??
+    connectorStore
+      .listActiveConnectors()
+      .map((connector) => connector.id);
   const capabilityRegistry =
     options.capabilityRegistry || createCapabilityRegistry({ toolRegistry });
   const providerResolver =
@@ -127,6 +140,7 @@ export function createCapabilityBroker(options = {}) {
       toolRegistry,
       installedProviders,
       approvedConnectors,
+      activeConnectors,
       clawAutoProvision: options.clawAutoProvision,
       mcpAutoProvision: options.mcpAutoProvision,
     });
@@ -165,6 +179,8 @@ export function createCapabilityBroker(options = {}) {
         summary: publicSummaryForPlan(primaryPlan),
         consentRequired:
           primaryPlan?.resolution?.selected?.status === "consent_required",
+        activationRequired:
+          primaryPlan?.resolution?.selected?.status === "activation_required",
         autoProvision:
           primaryPlan?.resolution?.selected?.status === "provisionable",
         tooling: {
@@ -274,6 +290,19 @@ export function createCapabilityBroker(options = {}) {
           acquisition,
           outcome: {
             status: "awaiting_consent",
+            action: nextAction,
+            provider,
+            connectorId: provider?.connectorId || null,
+          },
+        };
+      }
+
+      if (nextAction === "activate_connector_runtime") {
+        return {
+          plan,
+          acquisition,
+          outcome: {
+            status: "activation_pending",
             action: nextAction,
             provider,
             connectorId: provider?.connectorId || null,

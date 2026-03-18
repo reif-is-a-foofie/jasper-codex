@@ -47,6 +47,10 @@ function deriveRecordStatus(record) {
     return "awaiting_consent";
   }
 
+  if (record.strategy === "activate_connector") {
+    return "activation_pending";
+  }
+
   const pendingCandidates = record.candidates.filter(
     (candidate) => candidate.status === "pending_quarantine",
   );

@@ -9,6 +9,8 @@ import { generateToolFromTemplate } from "../../jasper-tools/src/generator.js";
 import { listGeneratorTemplates } from "../../jasper-tools/src/generator.js";
 import { createToolRegistry } from "../../jasper-tools/src/registry.js";
 import { approveConnector } from "./apps.js";
+import { activateConnector } from "./apps.js";
+import { deactivateConnector } from "./apps.js";
 import { getJasperAppStatus } from "./apps.js";
 import { mergeDoctorStatus } from "./apps.js";
 import { revokeConnector } from "./apps.js";
@@ -25,7 +27,9 @@ function printUsage() {
   node jasper-agent/src/cli.js doctor [--jasper-home PATH]
   node jasper-agent/src/cli.js apps [--jasper-home PATH]
   node jasper-agent/src/cli.js apps approve CONNECTOR_ID [--description TEXT] [--jasper-home PATH]
+  node jasper-agent/src/cli.js apps activate CONNECTOR_ID [--description TEXT] [--jasper-home PATH]
   node jasper-agent/src/cli.js apps revoke CONNECTOR_ID [--description TEXT] [--jasper-home PATH]
+  node jasper-agent/src/cli.js apps deactivate CONNECTOR_ID [--description TEXT] [--jasper-home PATH]
   node jasper-agent/src/cli.js identity [--identity PATH]
   node jasper-agent/src/cli.js memory recent [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js memory search QUERY [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
@@ -291,6 +295,22 @@ async function main() {
       return;
     }
 
+    if (appsCommand === "activate") {
+      const [connectorId] = appsOptions.positionals;
+      if (!connectorId) {
+        throw new Error("Apps activate requires a CONNECTOR_ID");
+      }
+      printJson(
+        activateConnector({
+          connectorId,
+          note: appsOptions.description,
+          jasperHome: appsOptions.jasperHome,
+          memoryRoot: appsOptions.memoryRoot,
+        }),
+      );
+      return;
+    }
+
     if (appsCommand === "revoke") {
       const [connectorId] = appsOptions.positionals;
       if (!connectorId) {
@@ -298,6 +318,22 @@ async function main() {
       }
       printJson(
         revokeConnector({
+          connectorId,
+          note: appsOptions.description,
+          jasperHome: appsOptions.jasperHome,
+          memoryRoot: appsOptions.memoryRoot,
+        }),
+      );
+      return;
+    }
+
+    if (appsCommand === "deactivate") {
+      const [connectorId] = appsOptions.positionals;
+      if (!connectorId) {
+        throw new Error("Apps deactivate requires a CONNECTOR_ID");
+      }
+      printJson(
+        deactivateConnector({
           connectorId,
           note: appsOptions.description,
           jasperHome: appsOptions.jasperHome,

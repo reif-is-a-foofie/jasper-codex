@@ -5,6 +5,7 @@ import { createCapabilityBroker } from "./index.js";
 
 const PENDING_STATUSES = new Set([
   "awaiting_consent",
+  "activation_pending",
   "quarantine_pending",
   "build_recommended",
   "planned",

@@ -28,7 +28,7 @@ This onboarding flow now includes a first-pass guided auth check, but it still s
 
 Deferred items:
 
-- connector consent flows
+- connector consent and activation flows
 - mailbox, calendar, and browser onboarding
 - remote hosted vector store provisioning
 - richer operator auth choices inside setup beyond the current inline reuse of Codex login flows
@@ -41,7 +41,7 @@ Current onboarding behavior:
 - if setup is interactive and auth is still missing, it can inline the existing Codex login flow instead of forcing a separate command detour
 - `jasper doctor` reports setup, runtime, auth, and local semantic-store health with suggested follow-up steps
 - Jasper can already auto-surface installed calendar and mailbox tools from normal household prompts during chat
-- if the user asks for household app access and the connector is still missing, Jasper should direct them to `jasper apps` in the terminal, where the approval state can be reviewed and persisted
+- if the user asks for household app access and the connector is still missing, Jasper should direct them to `jasper apps` in the terminal, where approval and activation state can be reviewed and changed
 
 ## Qdrant Provisioning Model
 
@@ -82,9 +82,9 @@ Supported setup modes:
 
 ## Near-Term Follow-Up
 
-The next onboarding work after first-pass auth is guided connector activation and healthier local infrastructure:
+The next onboarding work after first-pass auth is connector-aware setup and healthier local infrastructure:
 
-1. present connector consent steps one system at a time
+1. present connector consent and activation steps one system at a time
 2. store a minimal operator profile safely
 3. confirm Jasper can materialize raw memory into its provisioned local semantic store automatically
 4. make `jasper doctor` actionable for connector and semantic-store remediation, not just runtime/auth

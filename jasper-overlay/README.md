@@ -15,7 +15,7 @@ Current launcher behavior:
 - `node jasper-overlay/bin/jasper.js` launches Codex with Jasper branding enabled
 - `node jasper-overlay/bin/jasper.js setup` initializes Jasper home state and provisions Qdrant
 - `node jasper-overlay/bin/jasper.js doctor` reports Jasper setup, runtime, auth, and Qdrant health
-- `node jasper-overlay/bin/jasper.js apps` reports connector and app requests Jasper is waiting on and supports connector approval/revocation flows
+- `node jasper-overlay/bin/jasper.js apps` reports connector and app requests Jasper is waiting on and supports connector approval, activation, deactivation, and revocation flows
 - `node jasper-overlay/bin/jasper.js identity` reads Jasper identity config
 - `node jasper-overlay/bin/jasper.js runtime` starts the standalone Jasper runtime scaffold
 - `node jasper-overlay/bin/jasper.js runtime --watch-path PATH` enables filesystem observation for a target path
@@ -63,6 +63,6 @@ Installed package behavior:
 - `jasper identity`, `jasper memory`, `jasper dream`, and `jasper tools` work from the packaged Jasper JS modules without requiring a repo checkout
 - packaged Jasper should also carry its own local semantic-model and semantic-runtime assets once model-based embeddings replace the deterministic placeholder
 - first-pass OpenAI auth validation is now part of setup, but connector onboarding is still manual for now
-- in the live terminal chat, Jasper now auto-surfaces installed calendar and mailbox tools from normal household prompts and should send the user to `jasper apps` when a household connector is still missing or awaiting consent
+- in the live terminal chat, Jasper now auto-surfaces installed calendar and mailbox tools from normal household prompts and should send the user to `jasper apps` when a household connector is still missing approval or still needs activation
 
 Do not move Jasper behavior into `codex-rs/` or `codex-cli/` unless the core patch gate in `docs/jasper/FORK_STRATEGY.md` is satisfied.

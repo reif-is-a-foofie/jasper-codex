@@ -32,6 +32,29 @@ function connectorsLayout(options = {}) {
   };
 }
 
+function deriveConnectorStatus(state) {
+  if (state.runtimeStatus === "active") {
+    return "ready";
+  }
+
+  if (state.consentStatus === "approved") {
+    return "approved_not_active";
+  }
+
+  if (state.consentStatus === "revoked") {
+    return "revoked";
+  }
+
+  return "unknown";
+}
+
+function withDerivedStatus(state) {
+  return {
+    ...state,
+    status: deriveConnectorStatus(state),
+  };
+}
+
 function applyConnectorEvent(states, event) {
   const connectorId = normalizeConnectorId(event.connectorId);
   if (!connectorId) {
@@ -41,39 +64,94 @@ function applyConnectorEvent(states, event) {
   const current =
     states.get(connectorId) || {
       id: connectorId,
+      consentStatus: "unknown",
+      runtimeStatus: "inactive",
       status: "unknown",
       firstApprovedAt: null,
       approvedAt: null,
       revokedAt: null,
+      activatedAt: null,
+      deactivatedAt: null,
       updatedAt: null,
       note: null,
     };
 
   if (event.action === "connector_approved") {
     const approvedAt = String(event.ts || "").trim() || null;
-    states.set(connectorId, {
-      ...current,
-      id: connectorId,
-      status: "approved",
-      firstApprovedAt: current.firstApprovedAt || approvedAt,
-      approvedAt,
-      updatedAt: approvedAt,
-      note: event.note ? String(event.note) : null,
-    });
+    states.set(
+      connectorId,
+      withDerivedStatus({
+        ...current,
+        id: connectorId,
+        consentStatus: "approved",
+        firstApprovedAt: current.firstApprovedAt || approvedAt,
+        approvedAt,
+        updatedAt: approvedAt,
+        note: event.note ? String(event.note) : null,
+      }),
+    );
     return;
   }
 
   if (event.action === "connector_revoked") {
     const revokedAt = String(event.ts || "").trim() || null;
-    states.set(connectorId, {
-      ...current,
-      id: connectorId,
-      status: "revoked",
-      revokedAt,
-      updatedAt: revokedAt,
-      note: event.note ? String(event.note) : null,
-    });
+    states.set(
+      connectorId,
+      withDerivedStatus({
+        ...current,
+        id: connectorId,
+        consentStatus: "revoked",
+        runtimeStatus: "inactive",
+        revokedAt,
+        deactivatedAt: revokedAt,
+        updatedAt: revokedAt,
+        note: event.note ? String(event.note) : null,
+      }),
+    );
+    return;
   }
+
+  if (event.action === "connector_activated") {
+    const activatedAt = String(event.ts || "").trim() || null;
+    states.set(
+      connectorId,
+      withDerivedStatus({
+        ...current,
+        id: connectorId,
+        runtimeStatus: "active",
+        activatedAt,
+        updatedAt: activatedAt,
+        note: event.note ? String(event.note) : null,
+      }),
+    );
+    return;
+  }
+
+  if (event.action === "connector_deactivated") {
+    const deactivatedAt = String(event.ts || "").trim() || null;
+    states.set(
+      connectorId,
+      withDerivedStatus({
+        ...current,
+        id: connectorId,
+        runtimeStatus: "inactive",
+        deactivatedAt,
+        updatedAt: deactivatedAt,
+        note: event.note ? String(event.note) : null,
+      }),
+    );
+    return;
+  }
+}
+
+function currentStateOrThrow(state, connectorId, action) {
+  if (state) {
+    return state;
+  }
+
+  throw new Error(
+    `Connector ${action} requires a known connector id: ${connectorId}`,
+  );
 }
 
 export class JasperConnectorStore {
@@ -105,7 +183,13 @@ export class JasperConnectorStore {
 
   listApprovedConnectors() {
     return this.listConnectorStates().filter(
-      (state) => state.status === "approved",
+      (state) => state.consentStatus === "approved",
+    );
+  }
+
+  listActiveConnectors() {
+    return this.listConnectorStates().filter(
+      (state) => state.runtimeStatus === "active",
     );
   }
 
@@ -126,6 +210,34 @@ export class JasperConnectorStore {
     return this.getConnectorState(normalized);
   }
 
+  activateConnector(connectorId, note = null) {
+    const normalized = normalizeConnectorId(connectorId);
+    if (!normalized) {
+      throw new Error("Connector activation requires a connector id");
+    }
+
+    const state = currentStateOrThrow(
+      this.getConnectorState(normalized),
+      normalized,
+      "activation",
+    );
+    if (state.consentStatus !== "approved") {
+      throw new Error(
+        `Connector activation requires prior approval: ${normalized}`,
+      );
+    }
+
+    const ts = new Date().toISOString();
+    appendJsonLine(this.layout.approvalsLogPath, {
+      schemaVersion: 1,
+      action: "connector_activated",
+      ts,
+      connectorId: normalized,
+      note: note ? String(note) : null,
+    });
+    return this.getConnectorState(normalized);
+  }
+
   revokeConnector(connectorId, note = null) {
     const normalized = normalizeConnectorId(connectorId);
     if (!normalized) {
@@ -136,6 +248,29 @@ export class JasperConnectorStore {
     appendJsonLine(this.layout.approvalsLogPath, {
       schemaVersion: 1,
       action: "connector_revoked",
+      ts,
+      connectorId: normalized,
+      note: note ? String(note) : null,
+    });
+    return this.getConnectorState(normalized);
+  }
+
+  deactivateConnector(connectorId, note = null) {
+    const normalized = normalizeConnectorId(connectorId);
+    if (!normalized) {
+      throw new Error("Connector deactivation requires a connector id");
+    }
+
+    currentStateOrThrow(
+      this.getConnectorState(normalized),
+      normalized,
+      "deactivation",
+    );
+
+    const ts = new Date().toISOString();
+    appendJsonLine(this.layout.approvalsLogPath, {
+      schemaVersion: 1,
+      action: "connector_deactivated",
       ts,
       connectorId: normalized,
       note: note ? String(note) : null,

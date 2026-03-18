@@ -68,11 +68,11 @@ jasper
 - Installable Jasper packages must be self-contained. End users should not need Rust, cargo, or other build tools on PATH.
 - `jasper setup` currently uses Docker as a developer fallback for local Qdrant provisioning. The packaged Jasper app should manage local services internally instead of asking end users to install infrastructure.
 - `jasper doctor` reports whether Jasper has a usable runtime, OpenAI/Codex auth, and a healthy local semantic-store configuration.
-- `jasper apps` reports connector and app requests Jasper is currently blocked on, and `jasper apps approve CONNECTOR_ID` / `jasper apps revoke CONNECTOR_ID` persist connector consent state.
+- `jasper apps` reports connector and app requests Jasper is currently blocked on, and `jasper apps approve CONNECTOR_ID`, `jasper apps activate CONNECTOR_ID`, `jasper apps deactivate CONNECTOR_ID`, and `jasper apps revoke CONNECTOR_ID` now model consent and runtime readiness separately.
 - Jasper writes raw memory into local JSONL logs first, then `jasper memory materialize` can push that history into the local semantic index.
 - The near-term semantic-memory plan is `fastembed` with bundled local model and runtime assets plus local-first storage, not a hosted dependency.
 - `jasper setup` now validates existing OpenAI/Codex auth when possible; guided connector setup is still deferred for now.
-- In the current terminal product, installed calendar and mailbox tools can already surface from normal household prompts; missing household connectors should route the user to `jasper apps`, where consent can now be reviewed and persisted.
+- In the current terminal product, installed calendar and mailbox tools can already surface from normal household prompts; missing household connectors should route the user to `jasper apps`, where Jasper can now show whether a connector still needs approval or just needs activation.
 - Live terminal Jasper now also runs automatic after-turn tool intake and remembers tool-status summaries, so Jasper can keep pulling in connector/quarantine/build work while you use it.
 - Some deeper docs and source directories still use Codex naming because the fork inherits upstream internals.
 - The maintained Jasper product contract lives in [docs/jasper/PROJECT_DETAILS.md](./docs/jasper/PROJECT_DETAILS.md).
