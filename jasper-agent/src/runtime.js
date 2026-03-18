@@ -5,6 +5,7 @@ import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
 import { createEnvironmentListeners } from "./listeners/index.js";
 import { createDigestReporter } from "./digest.js";
 import { createWorkflowManager } from "./workflows.js";
+import { createGuardManager } from "./guard.js";
 
 function nowIso() {
   return new Date().toISOString();
@@ -98,6 +99,13 @@ export class JasperRuntime {
         jasperHome: options.jasperHome,
       });
     this.lastDigestAt = 0;
+    this.guardManager =
+      options.guardManager ||
+      createGuardManager({
+        memory: this.memory,
+        jasperHome: options.jasperHome,
+      });
+    this.guardLastTimestamp = 0;
   }
 
   log(event, details = {}) {
@@ -300,6 +308,39 @@ export class JasperRuntime {
     }
   }
 
+  async runGuardChecks() {
+    if (!this.guardManager) {
+      return;
+    }
+
+    const result = this.guardManager.evaluatePendingEvents({
+      sinceTimestamp: this.guardLastTimestamp,
+      limit: 32,
+    });
+
+    if (result.latestTimestamp > this.guardLastTimestamp) {
+      this.guardLastTimestamp = result.latestTimestamp;
+    }
+
+    if (result.anomalies.length > 0) {
+      this.record(
+        "guard.detected",
+        {
+          count: result.anomalies.length,
+          severity: result.anomalies[0]?.payload.severity || "unknown",
+          categories: [
+            ...new Set(
+              result.anomalies.map((anomaly) => anomaly.payload.category),
+            ),
+          ],
+        },
+        {
+          tags: ["guard", "monitoring"],
+        },
+      );
+    }
+  }
+
   async start() {
     if (this.running) {
       throw new Error("Jasper runtime is already running");
@@ -410,6 +451,7 @@ export class JasperRuntime {
       }
 
       await this.runScheduledWorkflows();
+      await this.runGuardChecks();
 
       if (this.maxTicks !== null && this.tickCount >= this.maxTicks) {
         this.stop("max_ticks_reached");

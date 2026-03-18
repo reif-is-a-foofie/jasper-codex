@@ -76,7 +76,7 @@ This region builds the connectors, calendar tool, email interfaces, gating, and 
 4. **Milestone 4: Environment Awareness** — Status: complete. Outcome: listener-driven observations funnel into memory.
 9. **Milestone 9: Consent-Driven Connector Operations** — Status: active. Outcome: connector discovery, consent steps, and gating based on provider lanes let calendar and mail tools appear only after approval, so Jasper can answer prompts like `check tomorrow's calendar` or `summarize important unread email` without leaking credentials.
 10. **Milestone 10: Background Monitoring And Daily Digest** — Status: planned. Outcome: Jasper uses activated connectors to run continuous monitors, digest important changes, summarize email and calendar updates, and surface alerts through the preferred channel.
-12. **Milestone 12: Guardian Detection And Escalation** — Status: planned. Outcome: risk scoring, anomaly detection, and escalation paths layer on top of the same perception flows.
+12. **Milestone 12: Guardian Detection And Escalation** — Status: active. Outcome: risk scoring, anomaly detection, and escalation paths layer on top of the same perception flows while `jasper guard status/simulate` surfaces severity, explanations, and escalation channels.
 20. **Milestone 20: Mobile Presence And Interrupt Intelligence** — Status: planned. Outcome: ambient capture, push routing, and smarter interruption decisions continue the perception story outside the desk.
 
 ### Region 3: Memory & World Model

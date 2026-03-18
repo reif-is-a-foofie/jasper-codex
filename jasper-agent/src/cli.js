@@ -20,6 +20,7 @@ import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
 import { createJasperRuntime } from "./runtime.js";
 import { createDigestReporter } from "./digest.js";
 import { createWorkflowManager } from "./workflows.js";
+import { createGuardManager, GuardScenarios } from "./guard.js";
 
 function printUsage() {
   process.stdout.write(`Usage:
@@ -62,6 +63,8 @@ function printUsage() {
   node jasper-agent/src/cli.js broker capabilities
   node jasper-agent/src/cli.js broker inspect QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
   node jasper-agent/src/cli.js digest [STAGE] [--lookback-hours N] [--event-limit N] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js guard status [--limit N] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js guard simulate SCENARIO_ID [--note TEXT] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js workflows list [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js workflows run WORKFLOW_ID [--stage NAME] [--auto-approve] [--jasper-home PATH] [--memory-root PATH]
 `);
@@ -206,6 +209,11 @@ function parseArgs(argv) {
     }
     if (arg === "--device-auth") {
       options.deviceAuth = true;
+      continue;
+    }
+    if (arg === "--note") {
+      options.note = args[index + 1];
+      index += 1;
       continue;
     }
     if (arg === "--stage") {
@@ -768,6 +776,74 @@ async function main() {
         autoApprove: Boolean(workflowOptions.autoApprove),
       });
       printJson(result);
+      return;
+    }
+
+    printUsage();
+    return;
+  }
+
+  if (command === "guard") {
+    const [guardCommand, ...guardArgs] = rest;
+    const guardOptions = parseArgs(guardArgs);
+    const manager = createGuardManager({
+      memoryRoot: guardOptions.memoryRoot || options.memoryRoot,
+      jasperHome: guardOptions.jasperHome || options.jasperHome,
+    });
+
+    if (guardCommand === "status") {
+      const anomalies = manager.listAnomalies({
+        limit: guardOptions.limit || 10,
+      });
+      printJson({
+        status: anomalies.length > 0 ? "needs_attention" : "nominal",
+        anomalies: anomalies.map((event) => ({
+          id: event.payload.id,
+          category: event.payload.category,
+          detail: event.payload.detail,
+          severity: event.payload.severity,
+          score: event.payload.severityScore,
+          escalationChannel: event.payload.escalationChannel,
+          timestamp: event.payload.timestamp,
+          stage: event.payload.stage,
+        })),
+        nextSteps:
+          anomalies.length > 0
+            ? [
+                "Investigate the highest severity anomaly and confirm the escalation route before dismissing.",
+              ]
+            : ["No anomalies detected; keep monitoring the streams."],
+      });
+      return;
+    }
+
+    if (guardCommand === "simulate") {
+      const [scenarioId] = guardOptions.positionals;
+      if (!scenarioId) {
+        throw new Error("Guard simulate requires a SCENARIO_ID");
+      }
+      if (!GuardScenarios.includes(scenarioId)) {
+        throw new Error(
+          `Unknown guard scenario: ${scenarioId}. Known values: ${GuardScenarios.join(
+            ", ",
+          )}`,
+        );
+      }
+      const anomaly = manager.simulateScenario(scenarioId, {
+        context: {
+          note: guardOptions.note || null,
+        },
+      });
+      printJson({
+        status: "simulated",
+        anomaly: {
+          id: anomaly.payload.id,
+          category: anomaly.payload.category,
+          severity: anomaly.payload.severity,
+          detail: anomaly.payload.detail,
+          timestamp: anomaly.payload.timestamp,
+        },
+      });
       return;
     }
 
