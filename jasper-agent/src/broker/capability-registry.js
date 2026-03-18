@@ -104,6 +104,31 @@ const CAPABILITIES = [
     ],
   },
   {
+    id: "apps.status",
+    label: "Apps and connectors status",
+    description: "Inspect pending and approved Jasper app and connector state.",
+    keywords: [
+      "apps",
+      "connectors",
+      "connected",
+      "approve",
+      "approval",
+      "consent",
+    ],
+    phrases: [
+      "what apps do you need connected",
+      "what connectors do you need",
+      "which apps are connected",
+      "show app status",
+    ],
+    providerCandidates: [
+      {
+        providerId: "builtin",
+        toolId: "apps-status",
+      },
+    ],
+  },
+  {
     id: "calendar.read",
     label: "Calendar access",
     description: "Read calendar availability and upcoming events.",

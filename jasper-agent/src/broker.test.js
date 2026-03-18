@@ -63,6 +63,17 @@ test("routes web research into the built-in web tool", () => {
   assert.equal(plan.publicPlan.tooling.quarantineRequired, false);
 });
 
+test("routes app and connector status questions to the built-in apps tool", () => {
+  const broker = createCapabilityBroker();
+  const plan = broker.inspectRequest("what apps do you need connected for this");
+
+  assert.equal(plan.internalPlan.primaryCapabilityId, "apps.status");
+  assert.equal(plan.internalPlan.primaryProvider.providerId, "builtin");
+  assert.equal(plan.internalPlan.primaryProvider.toolId, "apps-status");
+  assert.equal(plan.internalPlan.primaryProvider.status, "available");
+  assert.equal(plan.internalPlan.acquisition.strategy, "use_existing");
+});
+
 test("acquireRequest materializes an available built-in tool", () => {
   const jasperHome = createJasperHome();
   const store = createToolAcquisitionStore({ jasperHome });
