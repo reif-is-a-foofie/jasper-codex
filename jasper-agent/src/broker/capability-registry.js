@@ -217,6 +217,38 @@ function normalizeText(value) {
   return String(value || "").toLowerCase();
 }
 
+export function getConnectorCapability(connectorId) {
+  const normalized = normalizeText(connectorId);
+  if (!normalized) {
+    return null;
+  }
+
+  return (
+    CAPABILITIES.find((capability) =>
+      capability.providerCandidates.some(
+        (candidate) =>
+          candidate.providerId === "connector" &&
+          normalizeText(candidate.connectorId) === normalized,
+      ),
+    ) || null
+  );
+}
+
+export function getPreferredConnectorProvider(connectorId) {
+  const capability = getConnectorCapability(connectorId);
+  if (!capability) {
+    return null;
+  }
+
+  return (
+    capability.providerCandidates.find((candidate) => candidate.providerId === "mcp") ||
+    capability.providerCandidates.find(
+      (candidate) => candidate.providerId === "claw",
+    ) ||
+    null
+  );
+}
+
 function normalizeLimit(value, fallback = 3) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) {

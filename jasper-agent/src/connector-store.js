@@ -66,6 +66,7 @@ function applyConnectorEvent(states, event) {
       id: connectorId,
       consentStatus: "unknown",
       runtimeStatus: "inactive",
+      providerId: null,
       status: "unknown",
       firstApprovedAt: null,
       approvedAt: null,
@@ -119,6 +120,7 @@ function applyConnectorEvent(states, event) {
         ...current,
         id: connectorId,
         runtimeStatus: "active",
+        providerId: event.providerId ? String(event.providerId) : current.providerId,
         activatedAt,
         updatedAt: activatedAt,
         note: event.note ? String(event.note) : null,
@@ -135,6 +137,7 @@ function applyConnectorEvent(states, event) {
         ...current,
         id: connectorId,
         runtimeStatus: "inactive",
+        providerId: event.providerId ? String(event.providerId) : current.providerId,
         deactivatedAt,
         updatedAt: deactivatedAt,
         note: event.note ? String(event.note) : null,
@@ -210,7 +213,7 @@ export class JasperConnectorStore {
     return this.getConnectorState(normalized);
   }
 
-  activateConnector(connectorId, note = null) {
+  activateConnector(connectorId, note = null, providerId = null) {
     const normalized = normalizeConnectorId(connectorId);
     if (!normalized) {
       throw new Error("Connector activation requires a connector id");
@@ -233,6 +236,7 @@ export class JasperConnectorStore {
       action: "connector_activated",
       ts,
       connectorId: normalized,
+      providerId: providerId ? String(providerId) : null,
       note: note ? String(note) : null,
     });
     return this.getConnectorState(normalized);
@@ -255,7 +259,7 @@ export class JasperConnectorStore {
     return this.getConnectorState(normalized);
   }
 
-  deactivateConnector(connectorId, note = null) {
+  deactivateConnector(connectorId, note = null, providerId = null) {
     const normalized = normalizeConnectorId(connectorId);
     if (!normalized) {
       throw new Error("Connector deactivation requires a connector id");
@@ -273,6 +277,7 @@ export class JasperConnectorStore {
       action: "connector_deactivated",
       ts,
       connectorId: normalized,
+      providerId: providerId ? String(providerId) : null,
       note: note ? String(note) : null,
     });
     return this.getConnectorState(normalized);

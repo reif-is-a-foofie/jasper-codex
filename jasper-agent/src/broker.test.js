@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { approveConnector } from "./apps.js";
+import { activateConnector } from "./apps.js";
 import { createToolAcquisitionStore } from "./broker/acquisition-store.js";
 import { createCapabilityBroker } from "./broker/index.js";
 
@@ -123,6 +124,26 @@ test("acquireRequest tracks approved connectors that still need activation", () 
   assert.equal(result.acquisition.status, "activation_pending");
   assert.equal(result.outcome.status, "activation_pending");
   assert.equal(result.outcome.connectorId, "calendar");
+});
+
+test("active connectors prefer their bound executable provider lane", () => {
+  const jasperHome = createJasperHome();
+  approveConnector({
+    jasperHome,
+    connectorId: "calendar",
+  });
+  activateConnector({
+    jasperHome,
+    connectorId: "calendar",
+  });
+  const broker = createCapabilityBroker({ jasperHome });
+
+  const plan = broker.inspectRequest("check my calendar for tomorrow morning");
+
+  assert.equal(plan.internalPlan.primaryProvider.providerId, "mcp");
+  assert.equal(plan.internalPlan.primaryProvider.packageId, "jasper/calendar");
+  assert.equal(plan.internalPlan.primaryProvider.status, "available");
+  assert.equal(plan.internalPlan.acquisition.strategy, "use_existing");
 });
 
 test("acquireRequest persists quarantine work for external candidates", () => {

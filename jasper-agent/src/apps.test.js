@@ -88,6 +88,9 @@ test("approved connectors are remembered but still require activation", () => {
   assert.equal(status.connectors[0].status, "approved_not_active");
   assert.equal(status.connectors[0].consentStatus, "approved");
   assert.equal(status.connectors[0].runtimeStatus, "inactive");
+  assert.equal(status.connectors[0].preferredProviderId, "jasper/calendar");
+  assert.equal(status.connectors[0].preferredProviderKind, "mcp");
+  assert.equal(status.connectors[0].providerId, null);
   assert.equal(plan.internalPlan.primaryProvider.status, "activation_required");
   assert.equal(plan.publicPlan.activationRequired, true);
   assert.match(
@@ -116,8 +119,11 @@ test("activating an approved connector makes it available to the broker", () => 
   assert.equal(status.status, "ready");
   assert.equal(status.connectors[0].status, "ready");
   assert.equal(status.connectors[0].runtimeStatus, "active");
+  assert.equal(status.connectors[0].providerId, "jasper/calendar");
+  assert.equal(plan.internalPlan.primaryProvider.providerId, "mcp");
+  assert.equal(plan.internalPlan.primaryProvider.packageId, "jasper/calendar");
   assert.equal(plan.internalPlan.primaryProvider.status, "available");
-  assert.match(plan.internalPlan.primaryProvider.reason, /active and ready/i);
+  assert.match(plan.internalPlan.primaryProvider.reason, /active for Jasper use/i);
 });
 
 test("deactivating a connector returns matching requests to approved-not-active", () => {
@@ -150,6 +156,7 @@ test("deactivating a connector returns matching requests to approved-not-active"
   assert.equal(status.connectors[0].status, "approved_not_active");
   assert.equal(status.connectors[0].consentStatus, "approved");
   assert.equal(status.connectors[0].runtimeStatus, "inactive");
+  assert.equal(status.connectors[0].providerId, "jasper/calendar");
   assert.equal(updatedPlan.internalPlan.primaryProvider.status, "activation_required");
 });
 
@@ -183,6 +190,7 @@ test("revoking a connector returns matching requests to consent-required", () =>
   assert.equal(status.connectors[0].status, "consent_required");
   assert.equal(status.connectors[0].consentStatus, "revoked");
   assert.equal(status.connectors[0].runtimeStatus, "inactive");
+  assert.equal(status.connectors[0].providerId, "jasper/calendar");
   assert.equal(updatedPlan.internalPlan.primaryProvider.status, "consent_required");
 });
 
@@ -195,7 +203,7 @@ test("doctor status includes app remediation when connectors are pending", () =>
     },
     {
       status: "needs_attention",
-      warnings: ["1 connector request is waiting on consent or setup."],
+      warnings: ["1 connector request is blocked by consent or activation."],
       nextSteps: ["Run `jasper apps` to review blocked connector requests."],
       connectors: [
         {

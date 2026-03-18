@@ -1,5 +1,6 @@
 import { createEventStore } from "../../jasper-memory/src/event-store.js";
 import { createConnectorStore } from "./connector-store.js";
+import { getPreferredConnectorProvider } from "./broker/capability-registry.js";
 import { createToolAcquisitionStore } from "./broker/acquisition-store.js";
 
 function normalizeText(value) {
@@ -17,6 +18,15 @@ function connectorLabel(connectorId) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function connectorProviderDetails(connectorId) {
+  const preferredProvider = getPreferredConnectorProvider(connectorId);
+  return {
+    preferredProviderId:
+      preferredProvider?.packageId || preferredProvider?.serverName || null,
+    preferredProviderKind: preferredProvider?.providerId || null,
+  };
 }
 
 function statusForRecord(record) {
@@ -94,6 +104,7 @@ function summarizeConnectors(records) {
 
   return [...summaries.values()]
     .map((summary) => ({
+      ...connectorProviderDetails(summary.id),
       id: summary.id,
       label: summary.label,
       status: summary.status,
@@ -135,11 +146,13 @@ function mergeConnectorStates(records, connectorStates) {
     const existing = summaries.get(state.id);
     const connectorStatus = connectorStatusFromState(state, existing);
     summaries.set(state.id, {
+      ...connectorProviderDetails(state.id),
       id: state.id,
       label: existing?.label || connectorLabel(state.id),
       status: connectorStatus,
       consentStatus: state.consentStatus || "unknown",
       runtimeStatus: state.runtimeStatus || "inactive",
+      providerId: state.providerId || existing?.providerId || null,
       approvedAt: state.approvedAt || null,
       revokedAt: state.revokedAt || null,
       activatedAt: state.activatedAt || null,
@@ -168,6 +181,9 @@ function mergeConnectorStates(records, connectorStates) {
       runtimeStatus:
         connector.runtimeStatus ||
         (connector.status === "ready" ? "active" : "inactive"),
+      preferredProviderId: connector.preferredProviderId || null,
+      preferredProviderKind: connector.preferredProviderKind || null,
+      providerId: connector.providerId || null,
       approvedAt: connector.approvedAt || null,
       revokedAt: connector.revokedAt || null,
       activatedAt: connector.activatedAt || null,
@@ -286,7 +302,17 @@ export function activateConnector(options = {}) {
     throw new Error("Connector activation requires a connector id");
   }
 
-  const state = connectorStore.activateConnector(connectorId, options.note);
+  const preferredProvider = getPreferredConnectorProvider(connectorId);
+  const providerId =
+    options.providerId ||
+    preferredProvider?.packageId ||
+    preferredProvider?.serverName ||
+    null;
+  const state = connectorStore.activateConnector(
+    connectorId,
+    options.note,
+    providerId,
+  );
   const memory =
     options.memory ||
     createEventStore({
@@ -300,6 +326,7 @@ export function activateConnector(options = {}) {
     tags: ["connector", "activation", "apps"],
     payload: {
       connectorId,
+      providerId,
       activatedAt: state?.activatedAt || null,
       note: options.note ? String(options.note) : null,
     },
@@ -339,6 +366,7 @@ export function revokeConnector(options = {}) {
     tags: ["connector", "consent", "apps"],
     payload: {
       connectorId,
+      providerId: state?.providerId || null,
       revokedAt: state?.revokedAt || null,
       note: options.note ? String(options.note) : null,
     },
@@ -364,7 +392,11 @@ export function deactivateConnector(options = {}) {
     throw new Error("Connector deactivation requires a connector id");
   }
 
-  const state = connectorStore.deactivateConnector(connectorId, options.note);
+  const state = connectorStore.deactivateConnector(
+    connectorId,
+    options.note,
+    options.providerId,
+  );
   const memory =
     options.memory ||
     createEventStore({
@@ -378,6 +410,7 @@ export function deactivateConnector(options = {}) {
     tags: ["connector", "activation", "apps"],
     payload: {
       connectorId,
+      providerId: state?.providerId || options.providerId || null,
       deactivatedAt: state?.deactivatedAt || null,
       note: options.note ? String(options.note) : null,
     },

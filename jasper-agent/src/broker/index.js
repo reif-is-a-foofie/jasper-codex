@@ -132,6 +132,12 @@ export function createCapabilityBroker(options = {}) {
     connectorStore
       .listActiveConnectors()
       .map((connector) => connector.id);
+  const activeConnectorProviders =
+    options.activeConnectorProviders ??
+    connectorStore
+      .listActiveConnectors()
+      .map((connector) => connector.providerId)
+      .filter(Boolean);
   const capabilityRegistry =
     options.capabilityRegistry || createCapabilityRegistry({ toolRegistry });
   const providerResolver =
@@ -141,6 +147,7 @@ export function createCapabilityBroker(options = {}) {
       installedProviders,
       approvedConnectors,
       activeConnectors,
+      activeConnectorProviders,
       clawAutoProvision: options.clawAutoProvision,
       mcpAutoProvision: options.mcpAutoProvision,
     });

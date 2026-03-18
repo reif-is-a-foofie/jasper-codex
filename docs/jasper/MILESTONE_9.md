@@ -22,6 +22,7 @@ Delivered here:
 - one-system-at-a-time consent guidance for mailbox, calendar, and related household tools
 - persisted connector approval state through `jasper apps approve` and `jasper apps revoke`
 - explicit connector runtime state through `jasper apps activate` and `jasper apps deactivate`
+- activation now binds a connector to a concrete preferred provider lane for later broker routing
 - connector state remembered in Jasper memory and surfaced in user-facing status
 - strong remediation path through `jasper apps` when required access is still missing
 

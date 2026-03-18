@@ -91,16 +91,19 @@ function resolveProvisionableCandidate(candidate, context, providerId) {
   const isInstalled = installedKeys.some((value) =>
     context.installedProviders.has(value),
   );
+  const isActiveConnectorProvider =
+    (packageId && context.activeConnectorProviders.has(packageId)) ||
+    (serverName && context.activeConnectorProviders.has(serverName));
 
-  if (isInstalled) {
+  if (isInstalled || isActiveConnectorProvider) {
     return {
       ...candidate,
       status: "available",
       action: "use",
       reason:
         providerId === "claw"
-          ? `Trusted Claw capability "${packageId}" is already installed.`
-          : `MCP-backed capability "${serverName || packageId}" is already installed.`,
+          ? `Trusted Claw capability "${packageId}" is active for Jasper use.`
+          : `MCP-backed capability "${serverName || packageId}" is active for Jasper use.`,
     };
   }
 
@@ -136,6 +139,7 @@ export function createProviderResolver(options = {}) {
     installedProviders: normalizeSet(options.installedProviders),
     approvedConnectors: normalizeSet(options.approvedConnectors),
     activeConnectors: normalizeSet(options.activeConnectors),
+    activeConnectorProviders: normalizeSet(options.activeConnectorProviders),
     clawAutoProvision: options.clawAutoProvision !== false,
     mcpAutoProvision: options.mcpAutoProvision !== false,
   };
@@ -166,6 +170,15 @@ export function createProviderResolver(options = {}) {
         const rankDelta = statusRank(right.status) - statusRank(left.status);
         if (rankDelta !== 0) {
           return rankDelta;
+        }
+
+        const preferExecutableOverConnector =
+          left.status === "available" &&
+          right.status === "available" &&
+          left.providerId !== right.providerId &&
+          (left.providerId === "connector" || right.providerId === "connector");
+        if (preferExecutableOverConnector) {
+          return left.providerId === "connector" ? 1 : -1;
         }
 
         return capability.providerCandidates.findIndex(
