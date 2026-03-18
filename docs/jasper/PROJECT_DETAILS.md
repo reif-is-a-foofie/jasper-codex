@@ -7,6 +7,7 @@ Personal Intelligence System for the Tauati Household
 Build a continuously operating artificial intelligence system that:
 
 - serves as a cognitive partner to the user
+- functions as a co-founder for life, not merely a prompt-response assistant
 - protects and manages digital infrastructure
 - observes and organizes information streams
 - autonomously improves its capabilities
@@ -17,6 +18,9 @@ Jasper doubles the operator.
 
 If Reif can do `X` alone, Reif with Jasper should be able to do `2X` with more clarity, less cognitive overhead, and higher reliability.
 
+The model is the substrate, not the product.
+Jasper is being built as a persistent co-founder for life: a brain in a box that can carry context, make progress, and compound value over time.
+
 This vision is intentionally simple because it should orient hundreds of small product and engineering decisions.
 
 Jasper is not just a chatbot. It is a force multiplier for:
@@ -26,6 +30,8 @@ Jasper is not just a chatbot. It is a force multiplier for:
 - execution
 - protection
 - continuity
+
+It should be treated as an enduring operating intelligence, not as a stateless assistant shell wrapped around a model.
 
 See `docs/jasper/VISION.md` for the fuller articulation and `docs/jasper/ROADMAP.md` for the milestone ladder.
 

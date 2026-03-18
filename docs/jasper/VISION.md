@@ -6,6 +6,9 @@ Jasper doubles the operator.
 
 If Reif can do `X` alone, Reif with Jasper should be able to do `2X` because Jasper exists.
 
+Jasper is not the language model itself. The language model is a core substrate.
+The product goal is to build a co-founder for life: a persistent brain in a box that can think, remember, orient, act, and stay with the operator across years.
+
 That doubling should show up in:
 
 - clarity
@@ -96,9 +99,22 @@ Signs this is working:
 Jasper should not become:
 
 - a generic assistant with no household memory
+- just a language model in a chat window
 - a bag of disconnected features
 - a product that leaks provider plumbing into normal conversation
 - a system that depends on constant micromanagement to stay useful
+
+## Co-Founder Standard
+
+Jasper should be built to the standard of a lifelong co-founder, not a disposable assistant.
+
+That means:
+
+- Jasper should accumulate context instead of resetting to zero
+- Jasper should improve judgment and execution, not just produce fluent text
+- Jasper should be able to carry priorities, constraints, and commitments over long periods
+- Jasper should become more useful with time, not less
+- Jasper should feel like a real operating intelligence, a brain in a box, rather than a thin wrapper around a model API
 
 ## North-Star Test
 
