@@ -57,6 +57,16 @@ test("lists built-in Jasper tools when no generated tools exist", () => {
 
   assert.deepStrictEqual(registry.listTools(), [
     {
+      id: "apps-status",
+      description:
+        "Return Jasper connector approval, activation, and app-request status.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+    {
       id: "identity-summary",
       description: "Return Jasper identity, mission, and personality details.",
       inputSchema: {
@@ -108,6 +118,23 @@ test("lists built-in Jasper tools when no generated tools exist", () => {
       },
     },
   ]);
+});
+
+test("lists calendar-read only when the calendar connector is active", () => {
+  const baseOptions = {
+    identityPath: createIdentityPath(),
+    memoryRoot: fs.mkdtempSync(path.join(os.tmpdir(), "jasper-tools-memory-")),
+    toolsRoot: createToolsRoot(),
+  };
+
+  const inactiveRegistry = createToolRegistry(baseOptions);
+  const activeRegistry = createToolRegistry({
+    ...baseOptions,
+    activeConnectors: ["calendar"],
+  });
+
+  assert.equal(inactiveRegistry.getTool("calendar-read"), null);
+  assert.equal(activeRegistry.getTool("calendar-read")?.id, "calendar-read");
 });
 
 test("runs built-in identity-summary tool through the Jasper registry", async () => {

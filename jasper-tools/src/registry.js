@@ -1,5 +1,6 @@
 import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
 import { createEventStore } from "../../jasper-memory/src/event-store.js";
+import { createConnectorStore } from "../../jasper-agent/src/connector-store.js";
 import { materializeGeneratedTool } from "./generated-tool.js";
 import { loadGeneratedRegistry } from "./generator.js";
 import { createAppsStatusTool } from "./tools/apps-status.js";
@@ -26,6 +27,14 @@ export function createToolContext(options = {}) {
 
 export function createToolRegistry(options = {}) {
   const context = createToolContext(options);
+  const activeConnectors = new Set(
+    (
+      options.activeConnectors ||
+      createConnectorStore({ jasperHome: options.jasperHome })
+        .listActiveConnectors()
+        .map((connector) => connector.id)
+    ).map((connectorId) => String(connectorId || "").trim()),
+  );
   const generatedTools = loadGeneratedRegistry(options.toolsRoot).map((entry) =>
     materializeGeneratedTool(
       {
@@ -39,13 +48,15 @@ export function createToolRegistry(options = {}) {
   );
   const tools = [
     createAppsStatusTool(context),
-    createCalendarReadTool(context),
     createIdentitySummaryTool(context),
     createRecentMemoryTool(context),
     createSemanticMemorySearchTool(context),
     createWebResearchTool(context),
     ...generatedTools,
   ];
+  if (activeConnectors.has("calendar")) {
+    tools.splice(1, 0, createCalendarReadTool(context));
+  }
 
   return {
     listTools() {
