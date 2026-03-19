@@ -67,7 +67,7 @@ Milestones in this region reinforce identity, values, operator alignment, and bo
 
 1. **Milestone 1: System Skeleton** — Status: complete. Outcome: Jasper owns its identity, launcher, and runtime scaffold.
 8. **Milestone 8: Guided Onboarding And Authentication** — Status: complete. Outcome: new operators install Jasper, authenticate, and reach a healthy first-run state without manual spelunking.
-14. **Milestone 14: Household Operating System** — Status: long-range. Outcome: Jasper becomes the default command center for planning, protection, execution, and review.
+14. **Milestone 14: Household Operating System** — Status: active. Outcome: Jasper opens `jasper` into a cockpit showing the digest, connectors, guard alerts, pending approvals, workflows, and strategic summaries so the operator can immediately see what matters and act without leaving the terminal.
 
 ### Region 2: Perception & Attention
 

@@ -21,6 +21,7 @@ import { createJasperRuntime } from "./runtime.js";
 import { createDigestReporter } from "./digest.js";
 import { createWorkflowManager } from "./workflows.js";
 import { createStrategicMemoryManager } from "./strategic-memory.js";
+import { createDashboard } from "./dashboard.js";
 import { createGuardManager, GuardScenarios } from "./guard.js";
 
 function printUsage() {
@@ -71,6 +72,7 @@ function printUsage() {
   node jasper-agent/src/cli.js commitments audit [--limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js workflows list [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js workflows run WORKFLOW_ID [--stage NAME] [--auto-approve] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js dashboard [--stage STAGE] [--lookback-hours N] [--event-limit N] [--alert-limit N] [--history-limit N] [--jasper-home PATH] [--memory-root PATH]
 `);
 }
 
@@ -215,6 +217,31 @@ function parseArgs(argv) {
       options.deviceAuth = true;
       continue;
     }
+    if (arg === "--dashboard-stage") {
+      options.dashboardStage = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--dashboard-lookback-hours") {
+      options.dashboardLookbackHours = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--dashboard-event-limit") {
+      options.dashboardEventLimit = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--dashboard-alert-limit") {
+      options.dashboardAlertLimit = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--dashboard-history-limit") {
+      options.dashboardHistoryLimit = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
     if (arg === "--note") {
       options.note = args[index + 1];
       index += 1;
@@ -239,6 +266,69 @@ function printJson(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+function summarizeConnectors(connectors) {
+  if (!Array.isArray(connectors) || connectors.length === 0) {
+    return "No connectors configured";
+  }
+  return connectors
+    .map((connector) => {
+      const status = connector.status || "unknown";
+      if (connector.needsAttention) {
+        return `${connector.label || connector.id} (${status}) [attention needed]`;
+      }
+      return `${connector.label || connector.id} (${status})`;
+    })
+    .join("\n  ");
+}
+
+function summarizeWorkflows(view) {
+  const rows = [];
+  for (const workflow of view.activeWorkflows || []) {
+    rows.push(
+      `${workflow.name || workflow.id} [${workflow.stepCount || "n/a"} steps]`,
+    );
+  }
+  if (rows.length === 0) {
+    return "No configured workflows yet";
+  }
+  return rows.join("\n  ");
+}
+
+async function renderDashboard(globalOptions = {}) {
+  const viewOptions = {
+    stage: globalOptions.dashboardStage,
+    lookbackHours: globalOptions.dashboardLookbackHours,
+    eventLimit: globalOptions.dashboardEventLimit,
+    alertLimit: globalOptions.dashboardAlertLimit,
+    historyLimit: globalOptions.dashboardHistoryLimit,
+  };
+  const dashboard = createDashboard({
+    jasperHome: globalOptions.jasperHome,
+    memoryRoot: globalOptions.memoryRoot,
+  });
+  const view = await dashboard.render(viewOptions);
+  process.stdout.write(`\n=== Jasper Dashboard (${view.timestamp}) ===\n`);
+  process.stdout.write(`Today digest:\n`);
+  for (const line of view.digest.summaryLines || []) {
+    process.stdout.write(`  ${line}\n`);
+  }
+  process.stdout.write(`\nConnectors:\n  ${summarizeConnectors(view.connectors)}\n`);
+  process.stdout.write(
+    `\nPending approvals: ${view.pendingApprovals.length}\n`,
+  );
+  process.stdout.write(`\nGuard alerts:\n`);
+  for (const alert of view.guardAlerts || []) {
+    process.stdout.write(
+      `  ${alert.id} (${alert.category}) ${alert.severity} - ${alert.detail}\n`,
+    );
+  }
+  process.stdout.write(`\nWorkflows:\n  ${summarizeWorkflows(view)}\n`);
+  process.stdout.write(
+    `\nStrategic summary: ${view.strategicAudit.summary} (${view.strategicAudit.totalCommitments} commitments, ${view.strategicAudit.contradictions.length} contradictions)\n`,
+  );
+  return view;
+}
+
 function inspectToolPlan(toolOptions) {
   const query = toolOptions.positionals.join(" ").trim();
   if (!query) {
@@ -259,13 +349,12 @@ function inspectToolPlan(toolOptions) {
 
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
-  if (!command) {
-    printUsage();
-    process.exit(1);
-  }
-
   const options = parseArgs(rest);
-  const runtime = createJasperRuntime(options);
+
+  if (!command || command === "dashboard") {
+    await renderDashboard(options);
+    return;
+  }
 
   if (command === "identity") {
     printJson(loadIdentityConfig({ identityPath: options.identityPath }));
@@ -957,6 +1046,7 @@ async function main() {
     process.exit(1);
   }
 
+  const runtime = createJasperRuntime(options);
   const stop = (signal) => {
     runtime.stop(signal);
   };
