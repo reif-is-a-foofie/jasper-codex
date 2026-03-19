@@ -85,7 +85,7 @@ This region captures working, episodic, semantic, and strategic memory so Jasper
 
 2. **Milestone 2: Persistent Memory** — Status: complete. Outcome: raw events, local embeddings, and retrieval.
 5. **Milestone 5: Dream State** — Status: complete. Outcome: reflections and clustered synthesis from recent activity.
-13. **Milestone 13: Strategic Memory And Commitments** — Status: planned. Outcome: long-horizon goals, promises, constraints, and relationships stay coherent across time.
+13. **Milestone 13: Strategic Memory And Commitments** — Status: active. Outcome: Jasper records commitments/goals, constantly audits for drift, and surfaces strategic summaries through `jasper memory strategic recent` plus `jasper commitments` commands.
 18. **Milestone 18: Knowledge Vault And Document Grounding** — Status: planned. Outcome: Jasper becomes grounded in the operator's real documents, notes, and records instead of relying mostly on conversation.
 19. **Milestone 19: Multi-Person Household Coordination** — Status: planned. Outcome: Jasper can coordinate plans, responsibilities, and notifications across the household instead of just a single operator thread.
 28. **Milestone 28: Personal Digital Twin And Simulation** — Status: planned. Outcome: Jasper can model commitments, resources, and constraints well enough to simulate options before action.

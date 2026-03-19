@@ -6,6 +6,7 @@ import { createEnvironmentListeners } from "./listeners/index.js";
 import { createDigestReporter } from "./digest.js";
 import { createWorkflowManager } from "./workflows.js";
 import { createGuardManager } from "./guard.js";
+import { createStrategicMemoryManager } from "./strategic-memory.js";
 
 function nowIso() {
   return new Date().toISOString();
@@ -106,6 +107,17 @@ export class JasperRuntime {
         jasperHome: options.jasperHome,
       });
     this.guardLastTimestamp = 0;
+    this.strategicManager =
+      options.strategicManager ||
+      createStrategicMemoryManager({
+        memory: this.memory,
+        jasperHome: options.jasperHome,
+      });
+    this.strategicAuditIntervalMs = Math.max(
+      1000,
+      Number(options.strategicAuditIntervalMs ?? 4 * 60 * 60 * 1000),
+    );
+    this.lastStrategicAuditAt = 0;
   }
 
   log(event, details = {}) {
@@ -341,6 +353,32 @@ export class JasperRuntime {
     }
   }
 
+  runStrategicAudit() {
+    if (!this.strategicManager) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this.lastStrategicAuditAt < this.strategicAuditIntervalMs) {
+      return;
+    }
+
+    const audit = this.strategicManager.auditCommitments({ limit: 40 });
+    this.record(
+      "memory.strategic.summary",
+      {
+        summary: audit.summary,
+        totalCommitments: audit.totalCommitments,
+        contradictions: audit.contradictions.length,
+      },
+      {
+        tags: ["memory", "strategic"],
+      },
+    );
+
+    this.lastStrategicAuditAt = now;
+  }
+
   async start() {
     if (this.running) {
       throw new Error("Jasper runtime is already running");
@@ -452,6 +490,7 @@ export class JasperRuntime {
 
       await this.runScheduledWorkflows();
       await this.runGuardChecks();
+      this.runStrategicAudit();
 
       if (this.maxTicks !== null && this.tickCount >= this.maxTicks) {
         this.stop("max_ticks_reached");

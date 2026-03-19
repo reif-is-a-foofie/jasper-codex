@@ -20,6 +20,7 @@ import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
 import { createJasperRuntime } from "./runtime.js";
 import { createDigestReporter } from "./digest.js";
 import { createWorkflowManager } from "./workflows.js";
+import { createStrategicMemoryManager } from "./strategic-memory.js";
 import { createGuardManager, GuardScenarios } from "./guard.js";
 
 function printUsage() {
@@ -38,6 +39,7 @@ function printUsage() {
   node jasper-agent/src/cli.js memory search QUERY [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js memory semantic QUERY [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js memory materialize [--memory-root PATH] [--jasper-home PATH]
+  node jasper-agent/src/cli.js memory strategic recent [--limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js dream reflect [--memory-root PATH] [--limit N] [--type TYPE] [--source SOURCE]
   node jasper-agent/src/cli.js dream recent [--memory-root PATH] [--limit N]
   node jasper-agent/src/cli.js tools list [--identity PATH] [--memory-root PATH]
@@ -65,6 +67,8 @@ function printUsage() {
   node jasper-agent/src/cli.js digest [STAGE] [--lookback-hours N] [--event-limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js guard status [--limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js guard simulate SCENARIO_ID [--note TEXT] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js commitments list [--limit N] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js commitments audit [--limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js workflows list [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js workflows run WORKFLOW_ID [--stage NAME] [--auto-approve] [--jasper-home PATH] [--memory-root PATH]
 `);
@@ -434,6 +438,23 @@ async function main() {
 
     if (memoryCommand === "materialize") {
       printJson(await store.materializeSemanticIndex());
+      return;
+    }
+
+    if (memoryCommand === "strategic") {
+      const [subcommand] = memoryOptions.positionals;
+      if (subcommand !== "recent") {
+        throw new Error("Memory strategic requires the 'recent' subcommand");
+      }
+      const manager = createStrategicMemoryManager({
+        memoryRoot: memoryOptions.memoryRoot || options.memoryRoot,
+        jasperHome: memoryOptions.jasperHome || options.jasperHome,
+      });
+      printJson(
+        manager.listStrategicEvents({
+          limit: memoryOptions.limit,
+        }),
+      );
       return;
     }
 
@@ -849,6 +870,35 @@ async function main() {
 
     printUsage();
     return;
+  }
+
+  if (command === "commitments") {
+    const [commitmentCommand, ...commitmentArgs] = rest;
+    const commitmentOptions = parseArgs(commitmentArgs);
+    const manager = createStrategicMemoryManager({
+      memoryRoot: commitmentOptions.memoryRoot || options.memoryRoot,
+      jasperHome: commitmentOptions.jasperHome || options.jasperHome,
+    });
+
+    if (commitmentCommand === "list") {
+      printJson(
+        manager.listCommitments({
+          limit: commitmentOptions.limit,
+        }),
+      );
+      return;
+    }
+
+    if (commitmentCommand === "audit") {
+      printJson(
+        manager.auditCommitments({
+          limit: commitmentOptions.limit,
+        }),
+      );
+      return;
+    }
+
+    throw new Error("Commitments requires 'list' or 'audit' subcommand");
   }
 
   if (command === "digest") {
