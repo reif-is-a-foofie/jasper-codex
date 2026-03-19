@@ -68,6 +68,20 @@ test("dashboard render aggregates digest, guard, connectors, workflows, strategi
         },
       ],
     },
+    commsManager: {
+      generateBrief: () => ({
+        summary: [
+          {
+            threadId: "thread-1",
+            summary: "Need reply",
+            channel: "email",
+          },
+        ],
+        totalThreads: 1,
+        urgent: 1,
+        followUps: [],
+      }),
+    },
     fetchAppStatus: () => ({
       connectors: [
         { id: "calendar", needsAttention: true },
@@ -84,4 +98,5 @@ test("dashboard render aggregates digest, guard, connectors, workflows, strategi
   assert.equal(view.strategicAudit.summary, "ok");
   assert.strictEqual(view.workflowHistory.length, 1);
   assert.strictEqual(view.actionPlans.length, 1);
+  assert.strictEqual(view.commsBrief.summary[0].summary, "Need reply");
 });

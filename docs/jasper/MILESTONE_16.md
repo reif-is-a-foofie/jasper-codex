@@ -33,21 +33,24 @@ Milestone 16 should stay mostly Jasper-owned:
 - `jasper-memory/`
 - `docs/jasper/`
 
+## Task checklist
+
+- **Comms brief command.** Run `jasper comms brief` and confirm it returns a ranked list of threads with urgency, context, and follow-up notes that fit expectations for the top three responses.
+- **Draft replies.** Use `jasper comms draft --voice calm --limit 3` so Jasper can produce drafts that mention actor names, thread summaries, and next step commitments; verify tone and structure resemble the operator’s voice.
+- **Follow-up tracking.** Create at least one follow-up with `jasper comms draft` outcome or manual memory event, then run `jasper comms followups` to ensure the brief surfaces overdue follow-ups until marked closed.
+- **Dashboard visibility.** Open `jasper` and see the new “Comms brief” section summarizing urgent threads alongside digest, guard alerts, workflows, and action plans so the cockpit covers communications plus operations.
+- **Operator control.** Track `jasper action plan` interactions plus manual approvals so messages never move ahead without explicit go-ahead, fulfilling the guardrail requirement.
+
 ## Verification
 
 ```bash
-jasper comms brief
 jasper
+jasper comms brief
+jasper comms draft --limit 2
+jasper comms followups
 ```
-
-Run live prompts:
-
-1. `summarize what needs replies today`
-2. `draft replies for the top three threads in my voice`
-3. `what follow-ups are overdue from last week's meetings`
 
 Expected outcome:
 
-- Jasper ranks communication work accurately
-- drafts are grounded in thread context and prior relationship tone
-- unanswered commitments stay visible until closed
+- Jasper ranks communication work accurately and keeps drafts grounded in context.
+- Follow-ups remain visible until cleared, and the dashboard shows communications alongside digests and workflows.

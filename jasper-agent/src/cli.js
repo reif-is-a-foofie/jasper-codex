@@ -23,6 +23,7 @@ import { createWorkflowManager } from "./workflows.js";
 import { createStrategicMemoryManager } from "./strategic-memory.js";
 import { createDashboard } from "./dashboard.js";
 import { createComputerUseManager } from "./computer-use.js";
+import { createCommsManager } from "./comms.js";
 import { createGuardManager, GuardScenarios } from "./guard.js";
 
 function printUsage() {
@@ -80,6 +81,9 @@ function printUsage() {
   node jasper-agent/src/cli.js action plan approve PLAN_ID [--action-description TEXT] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js action plan run PLAN_ID [--action-stage STAGE] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js action plan pending [--limit N] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js comms brief [--limit N] [--summary-count N] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js comms draft [--limit N] [--voice TEXT] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js comms followups [--limit N] [--jasper-home PATH] [--memory-root PATH]
 `);
 }
 
@@ -254,6 +258,21 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--comms-limit") {
+      options.commsLimit = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--summary-count") {
+      options.summaryCount = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--voice") {
+      options.voice = args[index + 1];
+      index += 1;
+      continue;
+    }
     if (arg === "--action-title") {
       options.actionTitle = args[index + 1];
       index += 1;
@@ -364,6 +383,8 @@ async function renderDashboard(globalOptions = {}) {
     alertLimit: globalOptions.dashboardAlertLimit,
     historyLimit: globalOptions.dashboardHistoryLimit,
     actionLimit: globalOptions.dashboardActionLimit,
+    commsLimit: globalOptions.commsLimit,
+    commsSummaryCount: globalOptions.summaryCount,
   };
   const dashboard = createDashboard({
     jasperHome: globalOptions.jasperHome,
@@ -390,6 +411,14 @@ async function renderDashboard(globalOptions = {}) {
     `\nStrategic summary: ${view.strategicAudit.summary} (${view.strategicAudit.totalCommitments} commitments, ${view.strategicAudit.contradictions.length} contradictions)\n`,
   );
   process.stdout.write(`\nAction plans:\n  ${summarizePlans(view)}\n`);
+  process.stdout.write(
+    `\nComms brief: ${view.commsBrief.urgent} urgent of ${view.commsBrief.totalThreads} threads\n`,
+  );
+  for (const summary of view.commsBrief.summary || []) {
+    process.stdout.write(
+      `  ${summary.threadId} (${summary.channel}) - ${summary.summary}\n`,
+    );
+  }
   return view;
 }
 
@@ -1023,6 +1052,43 @@ async function main() {
 
     printUsage();
     return;
+  }
+
+  if (command === "comms") {
+    const [commsCommand, ...commsArgs] = rest;
+    const commsOptions = parseArgs(commsArgs);
+    const manager = createCommsManager({
+      memoryRoot: commsOptions.memoryRoot || options.memoryRoot,
+      jasperHome: commsOptions.jasperHome || options.jasperHome,
+    });
+
+    if (commsCommand === "brief") {
+      const brief = manager.generateBrief({
+        limit: commsOptions.limit,
+        summaryCount: commsOptions.summaryCount,
+      });
+      printJson(brief);
+      return;
+    }
+
+    if (commsCommand === "draft") {
+      const drafts = manager.draftReplies({
+        limit: commsOptions.limit,
+        voice: commsOptions.voice,
+      });
+      printJson(drafts);
+      return;
+    }
+
+    if (commsCommand === "followups") {
+      const pending = manager.listPendingFollowUps({
+        limit: commsOptions.limit,
+      });
+      printJson(pending);
+      return;
+    }
+
+    throw new Error("Comms command requires brief, draft, or followups");
   }
 
   if (command === "action") {
