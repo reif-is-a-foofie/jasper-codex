@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
 import { loadIdentityConfig } from "../../jasper-core/src/identity.js";
 import { getJasperSetupStatus } from "../../jasper-core/src/setup.js";
 import { setupJasper } from "../../jasper-core/src/setup.js";
@@ -25,6 +26,7 @@ import { createStrategicMemoryManager } from "./strategic-memory.js";
 import { createDashboard } from "./dashboard.js";
 import { createComputerUseManager } from "./computer-use.js";
 import { createCommsManager } from "./comms.js";
+import { createBrowserAutomation } from "./browser.js";
 import {
   describeExternalBenchmarkQueue,
   JasperExternalBenchmarkStore,
@@ -85,7 +87,9 @@ function printUsage() {
   node jasper-agent/src/cli.js workflows list [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js workflows run WORKFLOW_ID [--stage NAME] [--auto-approve] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js dashboard [--stage STAGE] [--lookback-hours N] [--event-limit N] [--alert-limit N] [--history-limit N] [--dashboard-action-limit N] [--jasper-home PATH] [--memory-root PATH]
-  node jasper-agent/src/cli.js action plan create [--action-title TEXT] [--action-steps TEXT] [--action-description TEXT] [--action-context TEXT] [--requires-approval] [--jasper-home PATH] [--memory-root PATH]
+  node jasper-agent/src/cli.js browser open URL [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
+  node jasper-agent/src/cli.js browser run [--plan-file PATH | --plan-json JSON] [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
+  node jasper-agent/src/cli.js action plan create [--action-title TEXT] [--action-steps TEXT] [--action-description TEXT] [--action-context TEXT] [--action-context-file PATH] [--requires-approval] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js action plan list [--limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js action plan status PLAN_ID [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js action plan approve PLAN_ID [--action-description TEXT] [--jasper-home PATH] [--memory-root PATH]
@@ -308,6 +312,11 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--action-context-file") {
+      options.actionContextFile = args[index + 1];
+      index += 1;
+      continue;
+    }
     if (arg === "--requires-approval") {
       options.requiresApproval = true;
       continue;
@@ -331,6 +340,39 @@ function parseArgs(argv) {
       options.autoApprove = true;
       continue;
     }
+    if (arg === "--browser") {
+      options.browser = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--plan-file") {
+      options.planFile = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--plan-json") {
+      options.planJson = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--headless") {
+      options.headless = true;
+      continue;
+    }
+    if (arg === "--keep-open") {
+      options.keepOpen = true;
+      continue;
+    }
+    if (arg === "--timeout-ms") {
+      options.timeoutMs = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--download-dir") {
+      options.downloadDir = args[index + 1];
+      index += 1;
+      continue;
+    }
     options.positionals.push(arg);
   }
 
@@ -349,6 +391,88 @@ function parseActionSteps(value) {
     .split(";")
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+function parseJsonText(value, label) {
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    throw new Error(
+      `Invalid JSON for ${label}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function readJsonFile(filePath, label) {
+  return parseJsonText(fs.readFileSync(filePath, "utf8"), label);
+}
+
+function parseActionContext(options = {}) {
+  if (options.actionContextFile) {
+    return readJsonFile(options.actionContextFile, "action context file");
+  }
+
+  if (!options.actionContext) {
+    return {};
+  }
+
+  const raw = String(options.actionContext).trim();
+  if (!raw) {
+    return {};
+  }
+
+  if (raw.startsWith("{") || raw.startsWith("[")) {
+    return parseJsonText(raw, "action context");
+  }
+
+  return raw;
+}
+
+function applyBrowserOverrides(plan, options = {}) {
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+    return plan;
+  }
+
+  const merged = {
+    ...plan,
+  };
+
+  if (options.browser) {
+    merged.browser = options.browser;
+  }
+  if (options.headless) {
+    merged.headless = true;
+  }
+  if (options.keepOpen) {
+    merged.closeOnExit = false;
+  }
+  if (options.timeoutMs) {
+    merged.timeoutMs = options.timeoutMs;
+  }
+  if (options.downloadDir) {
+    merged.downloadDir = options.downloadDir;
+  }
+
+  return merged;
+}
+
+function loadBrowserPlan(browserOptions = {}) {
+  const automation = createBrowserAutomation();
+
+  if (browserOptions.planFile) {
+    const plan = automation.loadPlan(
+      fs.readFileSync(browserOptions.planFile, "utf8"),
+      "browser plan file",
+    );
+    return applyBrowserOverrides(plan, browserOptions);
+  }
+
+  if (browserOptions.planJson) {
+    const plan = automation.loadPlan(browserOptions.planJson, "browser plan");
+    return applyBrowserOverrides(plan, browserOptions);
+  }
+
+  throw new Error("Browser run requires --plan-file or --plan-json");
 }
 
 function summarizeConnectors(connectors) {
@@ -1197,6 +1321,60 @@ async function main() {
     throw new Error("Comms command requires brief, draft, or followups");
   }
 
+  if (command === "browser") {
+    const [browserCommand, ...browserArgs] = rest;
+    const browserOptions = parseArgs(browserArgs);
+    const automation = createBrowserAutomation();
+
+    if (!browserCommand || browserCommand === "help") {
+      process.stdout.write(`Browser commands:
+  node jasper-agent/src/cli.js browser open URL [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
+  node jasper-agent/src/cli.js browser run --plan-file PATH [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
+  node jasper-agent/src/cli.js browser run --plan-json JSON [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
+`);
+      return;
+    }
+
+    if (browserCommand === "open") {
+      const url = browserOptions.positionals[0];
+      if (!url) {
+        throw new Error("Browser open requires a URL");
+      }
+
+      const result = await automation.runPlan(
+        applyBrowserOverrides(
+          {
+            kind: "browser",
+            browser: browserOptions.browser || "chrome",
+            headless: Boolean(browserOptions.headless),
+            closeOnExit: browserOptions.keepOpen ? false : undefined,
+            timeoutMs: browserOptions.timeoutMs,
+            downloadDir: browserOptions.downloadDir,
+            actions: [
+              {
+                type: "open",
+                url,
+              },
+              {
+                type: "snapshot",
+              },
+            ],
+          },
+          browserOptions,
+        ),
+      );
+      printJson(result);
+      return;
+    }
+
+    if (browserCommand === "run") {
+      printJson(await automation.runPlan(loadBrowserPlan(browserOptions)));
+      return;
+    }
+
+    throw new Error("Browser command requires 'open' or 'run'");
+  }
+
   if (command === "action") {
     const [actionTopic, ...actionArgs] = rest;
     const actionOptions = parseArgs(actionArgs);
@@ -1213,7 +1391,7 @@ async function main() {
           title: actionOptions.actionTitle,
           description: actionOptions.actionDescription,
           steps: parseActionSteps(actionOptions.actionSteps),
-          context: actionOptions.actionContext,
+          context: parseActionContext(actionOptions),
           requiresApproval: Boolean(actionOptions.requiresApproval),
         });
         printJson(plan);
@@ -1254,9 +1432,10 @@ async function main() {
           throw new Error("Plan run requires a PLAN_ID");
         }
         printJson(
-          manager.runPlan({
+          await manager.runPlan({
             planId,
             stage: actionOptions.actionStage,
+            browserOverrides: applyBrowserOverrides({}, actionOptions),
           }),
         );
         return;

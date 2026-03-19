@@ -53,6 +53,11 @@ const afterTurnHookPath = path.join(
   "src",
   "after-turn.js",
 );
+const terminalBenchRunnerPath = path.join(
+  repoRoot,
+  "scripts",
+  "run_terminal_bench_with_jasper.py",
+);
 const codexHome = path.resolve(
   process.env.CODEX_HOME || path.join(process.env.HOME || "", ".codex"),
 );
@@ -211,6 +216,22 @@ function findCommandOnPath(commandName) {
   }
 
   return null;
+}
+
+function resolvePythonCommand() {
+  const configuredPython =
+    process.env.JASPER_PYTHON_BIN || process.env.PYTHON_BIN || null;
+  if (configuredPython) {
+    return configuredPython;
+  }
+
+  return (
+    findCommandOnPath("python3") ||
+    findCommandOnPath("python") ||
+    (process.platform !== "win32" && fs.existsSync("/usr/bin/python3")
+      ? "/usr/bin/python3"
+      : null)
+  );
 }
 
 function resolveRustToolchain() {
@@ -422,6 +443,9 @@ Commands:
   doctor      Check Jasper setup, runtime, and auth health
   apps        Review connector and app requests Jasper is waiting on
   audit       Run Jasper self-audits and evaluation baselines
+  browser     Run Jasper browser automation plans
+  action      Inspect and run Jasper computer-use action plans
+  benchmark   Inspect and run Jasper external benchmarks
   help        Print this message
 
 Options:
@@ -724,6 +748,100 @@ if (
     [agentCliPath, "audit", ...args.slice(1)],
     jasperSetupEnv(process.env),
   );
+} else if (subcommand === "browser") {
+  child = spawnProcess(
+    process.execPath,
+    [agentCliPath, "browser", ...args.slice(1)],
+    jasperSetupEnv(process.env),
+  );
+} else if (subcommand === "action") {
+  child = spawnProcess(
+    process.execPath,
+    [agentCliPath, "action", ...args.slice(1)],
+    jasperSetupEnv(process.env),
+  );
+} else if (subcommand === "benchmark") {
+  const benchmarkCommand = args[1] || "";
+  const benchmarkArgs = args.slice(2);
+
+  if (!benchmarkCommand || benchmarkCommand === "help") {
+    process.stdout.write(`Jasper Benchmark Commands
+
+Usage:
+  jasper benchmark list
+  jasper benchmark queue
+  jasper benchmark score
+  jasper benchmark run terminal-bench [RUNNER_ARGS]
+
+Examples:
+  jasper benchmark list
+  jasper benchmark queue
+  jasper benchmark score
+  jasper benchmark run terminal-bench --task-id hello-world --dry-run
+  jasper benchmark run terminal-bench --task-id hello-world --import-benchmark-index
+`);
+    process.exit(0);
+  }
+
+  if (benchmarkCommand === "list") {
+    child = spawnProcess(
+      process.execPath,
+      [agentCliPath, "audit", "benchmark-index", "list"],
+      jasperSetupEnv(process.env),
+    );
+  } else if (benchmarkCommand === "queue" || benchmarkCommand === "plan") {
+    child = spawnProcess(
+      process.execPath,
+      [agentCliPath, "audit", "benchmark-index", "queue"],
+      jasperSetupEnv(process.env),
+    );
+  } else if (
+    benchmarkCommand === "score" ||
+    benchmarkCommand === "index" ||
+    benchmarkCommand === "status"
+  ) {
+    child = spawnProcess(
+      process.execPath,
+      [agentCliPath, "audit", "benchmark-index"],
+      jasperSetupEnv(process.env),
+    );
+  } else if (benchmarkCommand === "run") {
+    const benchmarkId = benchmarkArgs[0] || "";
+    const runnerArgs = benchmarkArgs.slice(1);
+
+    if (benchmarkId !== "terminal-bench" && benchmarkId !== "terminal_bench") {
+      process.stderr.write(
+        "jasper benchmark run currently supports only 'terminal-bench'.\n",
+      );
+      process.exit(1);
+    }
+
+    if (!fs.existsSync(terminalBenchRunnerPath)) {
+      process.stderr.write(
+        `jasper benchmark runner not found at ${terminalBenchRunnerPath}\n`,
+      );
+      process.exit(1);
+    }
+
+    const pythonCommand = resolvePythonCommand();
+    if (!pythonCommand) {
+      process.stderr.write(
+        "jasper benchmark run requires python3 or python on PATH.\n",
+      );
+      process.exit(1);
+    }
+
+    child = spawnProcess(
+      pythonCommand,
+      [terminalBenchRunnerPath, ...runnerArgs],
+      jasperSetupEnv(process.env),
+    );
+  } else {
+    process.stderr.write(
+      `Unknown benchmark command '${benchmarkCommand}'. Run 'jasper benchmark help'.\n`,
+    );
+    process.exit(1);
+  }
 } else {
   const codex = resolveCodexCommand();
   if (args.length === 0) {

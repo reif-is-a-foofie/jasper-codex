@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { createEventStore } from "../../jasper-memory/src/event-store.js";
+import {
+  browserPlanSteps,
+  createBrowserAutomation,
+  isBrowserPlanContext,
+} from "./browser.js";
 
 const PLAN_EVENT_TYPE = "computer-use.plan";
 const STEP_EVENT_TYPE = "computer-use.step";
@@ -72,7 +77,9 @@ function mapPlan(event, relatedEvents) {
   } else if (executionEvents.length === 0) {
     status = status === "approval_required" ? status : "ready";
   } else {
-    status = "completed";
+    status =
+      executionEvents[executionEvents.length - 1].payload?.status ||
+      "completed";
   }
 
   return {
@@ -90,19 +97,43 @@ function mapPlan(event, relatedEvents) {
       executionEvents.length > 0
         ? executionEvents[executionEvents.length - 1].ts
         : null,
+    lastExecution:
+      executionEvents.length > 0
+        ? executionEvents[executionEvents.length - 1].payload
+        : null,
     stepEvents,
   };
 }
 
 export function createComputerUseManager(options = {}) {
   const memory = options.memory || defaultEventStore(options);
+  const browserAutomation =
+    options.browserAutomation ||
+    createBrowserAutomation({
+      browserPath: options.browserPath,
+    });
 
   function buildPlanEvent(input = {}) {
-    const steps = (input.steps || []).map((description, index) => ({
-      stepId: input.steps[index]?.stepId || `step_${index + 1}`,
-      description,
-      requiresApproval: input.steps[index]?.requiresApproval ?? false,
-    }));
+    const inferredSteps =
+      (!Array.isArray(input.steps) || input.steps.length === 0) &&
+      isBrowserPlanContext(input.context)
+        ? browserPlanSteps(input.context)
+        : input.steps || [];
+    const steps = inferredSteps.map((entry, index) => {
+      if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+        return {
+          stepId: entry.stepId || entry.id || `step_${index + 1}`,
+          description: entry.description || entry.title || `Step ${index + 1}`,
+          requiresApproval: entry.requiresApproval ?? false,
+        };
+      }
+
+      return {
+        stepId: `step_${index + 1}`,
+        description: String(entry || `Step ${index + 1}`).trim(),
+        requiresApproval: false,
+      };
+    });
     const planId = input.planId || `plan_${randomUUID()}`;
     return memory.appendEvent({
       type: PLAN_EVENT_TYPE,
@@ -135,8 +166,7 @@ export function createComputerUseManager(options = {}) {
       .listRecentEvents({ limit })
       .filter(
         (event) =>
-          event.payload?.planId === planId ||
-          event.payload?.planId === planId,
+          event.payload?.planId === planId || event.payload?.planId === planId,
       );
     const planEvent = events.find((event) => event.type === PLAN_EVENT_TYPE);
     if (!planEvent) {
@@ -177,7 +207,7 @@ export function createComputerUseManager(options = {}) {
     return getPlan(planId);
   }
 
-  function runPlan(runOptions = {}) {
+  function runRecordedPlan(runOptions = {}) {
     const plan = getPlan(runOptions.planId);
     if (!plan) {
       throw new Error(`Unknown plan: ${runOptions.planId}`);
@@ -212,6 +242,7 @@ export function createComputerUseManager(options = {}) {
       payload: {
         planId: plan.planId,
         stage: runOptions.stage || "manual",
+        status: "completed",
         steps: stepEvents.map((event) => ({
           stepId: event.payload.stepId,
           status: event.payload.status,
@@ -219,12 +250,24 @@ export function createComputerUseManager(options = {}) {
       },
     });
 
-    return getPlan(plan.planId);
+    return {
+      ...getPlan(plan.planId),
+      execution: {
+        executor: "manual",
+        status: "completed",
+        steps: stepEvents.map((event) => ({
+          stepId: event.payload.stepId,
+          status: event.payload.status,
+        })),
+      },
+    };
   }
 
   function listPendingApprovals(listOptions = {}) {
     const limit = normalizeLimit(listOptions.limit, 20);
-    return listPlans({ limit }).filter((plan) => plan.status === "approval_required");
+    return listPlans({ limit }).filter(
+      (plan) => plan.status === "approval_required",
+    );
   }
 
   return {
@@ -236,7 +279,79 @@ export function createComputerUseManager(options = {}) {
     getPlan,
     requireApproval,
     approvePlan,
-    runPlan,
+    async runPlan(runOptions = {}) {
+      const plan = getPlan(runOptions.planId);
+      if (!plan) {
+        throw new Error(`Unknown plan: ${runOptions.planId}`);
+      }
+      if (plan.requiresApproval && !plan.approvedAt) {
+        return {
+          status: "approval_required",
+          planId: plan.planId,
+          steps: plan.steps,
+        };
+      }
+
+      if (isBrowserPlanContext(plan.context)) {
+        const browserRun = await browserAutomation.runPlan({
+          ...plan.context,
+          ...(runOptions.browserOverrides || {}),
+        });
+
+        const browserStepEvents = [];
+        for (const action of browserRun.actions || []) {
+          const stepEvent = memory.appendEvent({
+            type: STEP_EVENT_TYPE,
+            source: "jasper-computer-use",
+            tags: ["computer-use", "step", "browser"],
+            payload: {
+              planId: plan.planId,
+              stepId:
+                plan.steps[action.index]?.stepId || `step_${action.index + 1}`,
+              description: action.description,
+              status: action.status,
+              browser: browserRun.browser,
+              result: action.result || null,
+              error: action.error || null,
+            },
+          });
+          browserStepEvents.push(stepEvent);
+        }
+
+        const executionEvent = memory.appendEvent({
+          type: EXECUTION_EVENT_TYPE,
+          source: "jasper-computer-use",
+          tags: ["computer-use", "execution", "browser"],
+          payload: {
+            planId: plan.planId,
+            stage: runOptions.stage || "manual",
+            executor: "browser",
+            browser: browserRun.browser,
+            status: browserRun.status,
+            failure: browserRun.failure,
+            debugPort: browserRun.debugPort,
+            userDataDir: browserRun.userDataDir,
+            downloadDir: browserRun.downloadDir,
+            finalSnapshot: browserRun.finalSnapshot,
+            steps: browserStepEvents.map((event) => ({
+              stepId: event.payload.stepId,
+              status: event.payload.status,
+            })),
+          },
+        });
+
+        return {
+          ...getPlan(plan.planId),
+          execution: {
+            ...executionEvent.payload,
+            eventId: executionEvent.id,
+            actions: browserRun.actions,
+          },
+        };
+      }
+
+      return runRecordedPlan(runOptions);
+    },
     listPendingApprovals,
   };
 }

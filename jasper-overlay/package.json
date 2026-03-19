@@ -13,6 +13,8 @@
     "jasper-core",
     "jasper-memory",
     "jasper-tools",
+    "scripts/jasper_tb_agent.py",
+    "scripts/run_terminal_bench_with_jasper.py",
     "vendor",
     "README.md",
     "LICENSE"

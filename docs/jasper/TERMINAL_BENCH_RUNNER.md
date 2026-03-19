@@ -16,6 +16,7 @@ It does four things:
 Run a single task:
 
 ```bash
+jasper benchmark run terminal-bench --task-id hello-world
 python3 scripts/run_terminal_bench_with_jasper.py --task-id hello-world
 ```
 
@@ -31,9 +32,21 @@ python3 scripts/run_terminal_bench_with_jasper.py \
 Run a task and import the measured slice into Jasper's weighted external benchmark index:
 
 ```bash
+jasper benchmark run terminal-bench --task-id hello-world --import-benchmark-index
 python3 scripts/run_terminal_bench_with_jasper.py \
   --task-id hello-world \
   --import-benchmark-index
+```
+
+## Top-Level Jasper Commands
+
+Use these when you want the benchmark flow to feel like a native Jasper feature:
+
+```bash
+jasper benchmark list
+jasper benchmark queue
+jasper benchmark score
+jasper benchmark run terminal-bench --task-id hello-world --dry-run
 ```
 
 ## Defaults
