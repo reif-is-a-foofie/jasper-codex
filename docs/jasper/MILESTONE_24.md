@@ -28,7 +28,9 @@ A normal operator can install, update, and rely on Jasper without acting like a 
 
 Milestone 24 may require some lower-level seams, but Jasper-specific lifecycle behavior should remain isolated where possible.
 
-## Verification
+## Target Verification Surface
+
+This milestone is still planned. The commands below describe the target operator surface at completion, not functionality that exists today.
 
 ```bash
 jasper appliance status

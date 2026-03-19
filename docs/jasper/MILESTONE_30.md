@@ -28,7 +28,9 @@ Jasper feels less like an app and more like a persistent intelligence layer the 
 
 Milestone 30 is a product convergence milestone. It should still prefer Jasper-owned behavior wherever possible, but it may justify deeper seams when those seams materially improve long-term continuity and trust.
 
-## Verification
+## Target Verification Surface
+
+This milestone is still planned. The commands below describe the target operator surface at completion, not functionality that exists today.
 
 ```bash
 jasper continuity status

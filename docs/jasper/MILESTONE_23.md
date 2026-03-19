@@ -33,7 +33,9 @@ Milestone 23 should stay primarily Jasper-owned:
 - `jasper-tools/`
 - `docs/jasper/`
 
-## Verification
+## Target Verification Surface
+
+This milestone is still planned. The commands below describe the target operator surface at completion, not functionality that exists today.
 
 ```bash
 jasper evals run daily

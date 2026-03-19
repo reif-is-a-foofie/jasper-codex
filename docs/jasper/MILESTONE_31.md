@@ -40,8 +40,13 @@ Milestone 31 should stay mostly in Jasper-owned planning, evaluation, and docume
 jasper audit benchmark-index
 jasper audit benchmark-index queue
 jasper audit brain-in-a-box
-jasper evals plan jarvis-grade
 ```
+
+Supporting docs to review alongside those commands:
+
+- `docs/jasper/BENCHMARK_QUEUE.md`
+- `docs/jasper/EXTERNAL_BENCHMARK_INDEX.md`
+- `docs/jasper/BRAIN_IN_A_BOX_TEST.md`
 
 Expected outcome:
 
