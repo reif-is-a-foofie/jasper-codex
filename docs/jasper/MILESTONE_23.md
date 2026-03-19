@@ -39,6 +39,7 @@ Milestone 23 should stay primarily Jasper-owned:
 jasper evals run daily
 jasper self-heal status
 jasper smoke terminal
+jasper audit benchmark-index
 ```
 
 Expected outcome:

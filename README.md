@@ -68,6 +68,8 @@ jasper
 - Installable Jasper packages must be self-contained. End users should not need Rust, cargo, or other build tools on PATH.
 - `jasper setup` currently uses Docker as a developer fallback for local Qdrant provisioning. The packaged Jasper app should manage local services internally instead of asking end users to install infrastructure.
 - `jasper doctor` reports whether Jasper has a usable runtime, OpenAI/Codex auth, and a healthy local semantic-store configuration.
+- `jasper audit brain-in-a-box` runs Jasper's automated baseline brain-in-a-box audit and prints the current score, ceilings, evidence, and next steps.
+- `jasper audit benchmark-index` computes Jasper's weighted external benchmark index across public suites; `jasper audit benchmark-index scaffold` prints an import template and `jasper audit benchmark-index import FILE` records benchmark results.
 - `jasper apps` reports connector and app requests Jasper is currently blocked on, and `jasper apps approve CONNECTOR_ID`, `jasper apps activate CONNECTOR_ID`, `jasper apps deactivate CONNECTOR_ID`, and `jasper apps revoke CONNECTOR_ID` now model consent and runtime readiness separately.
 - Connector activation now also records Jasper's preferred provider lane, so later broker decisions can resolve to concrete paths like `jasper/calendar` instead of a generic connector placeholder.
 - Jasper now ships a first read-only calendar tool, `calendar-read`, which is exposed through the activated `jasper/calendar` provider lane.
@@ -86,6 +88,7 @@ jasper
 - [**Jasper Vision**](./docs/jasper/VISION.md)
 - [**Jasper Brain Regions**](./docs/jasper/BRAIN_REGIONS.md)
 - [**Brain-In-A-Box Test**](./docs/jasper/BRAIN_IN_A_BOX_TEST.md)
+- [**External Benchmark Index**](./docs/jasper/EXTERNAL_BENCHMARK_INDEX.md)
 - [**Jasper Roadmap**](./docs/jasper/ROADMAP.md)
 - [**Jasper Onboarding**](./docs/jasper/AUTOMATIC_ONBOARDING.md)
 - [**Jasper Tool Acquisition**](./docs/jasper/TOOL_ACQUISITION.md)

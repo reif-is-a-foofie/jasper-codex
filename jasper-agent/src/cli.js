@@ -17,6 +17,7 @@ import { revokeConnector } from "./apps.js";
 import { createToolAcquisitionStore } from "./broker/acquisition-store.js";
 import { createCapabilityBroker } from "./broker/index.js";
 import { createToolMaintenanceWorker } from "./broker/tool-maintenance.js";
+import { runBrainInABoxAudit } from "./brain-in-a-box.js";
 import { createJasperRuntime } from "./runtime.js";
 import { createDigestReporter } from "./digest.js";
 import { createWorkflowManager } from "./workflows.js";
@@ -24,6 +25,12 @@ import { createStrategicMemoryManager } from "./strategic-memory.js";
 import { createDashboard } from "./dashboard.js";
 import { createComputerUseManager } from "./computer-use.js";
 import { createCommsManager } from "./comms.js";
+import {
+  JasperExternalBenchmarkStore,
+  buildExternalBenchmarkTemplate,
+  computeExternalBenchmarkIndex,
+  listExternalBenchmarks,
+} from "./external-benchmark-index.js";
 import { createGuardManager, GuardScenarios } from "./guard.js";
 
 function printUsage() {
@@ -67,6 +74,8 @@ function printUsage() {
   node jasper-agent/src/cli.js broker agents
   node jasper-agent/src/cli.js broker capabilities
   node jasper-agent/src/cli.js broker inspect QUERY [--identity PATH] [--memory-root PATH] [--tools-root PATH]
+  node jasper-agent/src/cli.js audit brain-in-a-box [--jasper-home PATH] [--memory-root PATH] [--tools-root PATH] [--identity PATH]
+  node jasper-agent/src/cli.js audit benchmark-index [list|scaffold|import FILE] [--jasper-home PATH] [--memory-root PATH] [--weights-file PATH]
   node jasper-agent/src/cli.js digest [STAGE] [--lookback-hours N] [--event-limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js guard status [--limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js guard simulate SCENARIO_ID [--note TEXT] [--jasper-home PATH] [--memory-root PATH]
@@ -142,6 +151,11 @@ function parseArgs(argv) {
     }
     if (arg === "--query") {
       options.query = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--weights-file") {
+      options.weightsFile = args[index + 1];
       index += 1;
       continue;
     }
@@ -396,7 +410,9 @@ async function renderDashboard(globalOptions = {}) {
   for (const line of view.digest.summaryLines || []) {
     process.stdout.write(`  ${line}\n`);
   }
-  process.stdout.write(`\nConnectors:\n  ${summarizeConnectors(view.connectors)}\n`);
+  process.stdout.write(
+    `\nConnectors:\n  ${summarizeConnectors(view.connectors)}\n`,
+  );
   process.stdout.write(
     `\nPending approvals: ${view.pendingApprovals.length}\n`,
   );
@@ -955,6 +971,90 @@ async function main() {
     return;
   }
 
+  if (command === "audit") {
+    const [auditCommand, auditSubcommand, auditFile] = options.positionals;
+    if (
+      auditCommand === "brain-in-a-box" ||
+      auditCommand === "brain" ||
+      auditCommand === "brain_in_a_box"
+    ) {
+      printJson(
+        await runBrainInABoxAudit({
+          identityPath: options.identityPath,
+          jasperHome: options.jasperHome,
+          memoryRoot: options.memoryRoot,
+          toolsRoot: options.toolsRoot,
+          eventLimit: options.eventLimit,
+        }),
+      );
+      return;
+    }
+
+    if (
+      auditCommand === "benchmark-index" ||
+      auditCommand === "benchmark_index" ||
+      auditCommand === "external-benchmark-index"
+    ) {
+      const store = new JasperExternalBenchmarkStore({
+        jasperHome: options.jasperHome,
+        memoryRoot: options.memoryRoot,
+      });
+
+      if (!auditSubcommand) {
+        printJson(
+          computeExternalBenchmarkIndex({
+            jasperHome: options.jasperHome,
+            memoryRoot: options.memoryRoot,
+            weightsFile: options.weightsFile,
+          }),
+        );
+        return;
+      }
+
+      if (auditSubcommand === "list") {
+        printJson(listExternalBenchmarks());
+        return;
+      }
+
+      if (auditSubcommand === "scaffold" || auditSubcommand === "template") {
+        printJson(buildExternalBenchmarkTemplate());
+        return;
+      }
+
+      if (auditSubcommand === "import") {
+        if (!auditFile) {
+          throw new Error("Audit benchmark-index import requires a FILE path");
+        }
+
+        const imported = store.importResults(auditFile);
+        printJson({
+          import: imported,
+          index: computeExternalBenchmarkIndex({
+            jasperHome: options.jasperHome,
+            memoryRoot: options.memoryRoot,
+            weightOverrides:
+              Object.keys(imported.weightOverrides).length > 0
+                ? imported.weightOverrides
+                : undefined,
+            weightsFile:
+              Object.keys(imported.weightOverrides).length > 0
+                ? undefined
+                : options.weightsFile,
+          }),
+        });
+        return;
+      }
+
+      throw new Error(
+        "Audit benchmark-index supports 'list', 'scaffold', or 'import FILE'.",
+      );
+    }
+
+    throw new Error(
+      "Audit requires either 'brain-in-a-box' or 'benchmark-index'.",
+    );
+  }
+
   if (command === "workflows") {
     const [workflowCommand, ...workflowArgs] = rest;
     const workflowOptions = parseArgs(workflowArgs);
@@ -1139,9 +1239,7 @@ async function main() {
         if (!planId) {
           throw new Error("Plan approve requires a PLAN_ID");
         }
-        printJson(
-          manager.approvePlan(planId, actionOptions.actionDescription),
-        );
+        printJson(manager.approvePlan(planId, actionOptions.actionDescription));
         return;
       }
 

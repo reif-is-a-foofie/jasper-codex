@@ -47,7 +47,12 @@ const semanticRuntimeRoot = path.join(
   "resources",
   "semantic-runtime",
 );
-const afterTurnHookPath = path.join(repoRoot, "jasper-agent", "src", "after-turn.js");
+const afterTurnHookPath = path.join(
+  repoRoot,
+  "jasper-agent",
+  "src",
+  "after-turn.js",
+);
 const codexHome = path.resolve(
   process.env.CODEX_HOME || path.join(process.env.HOME || "", ".codex"),
 );
@@ -133,7 +138,8 @@ function resolveSemanticRuntimeLibrary() {
     return process.env.JASPER_ORT_DYLIB_PATH;
   }
 
-  const runtimeRoot = process.env.JASPER_SEMANTIC_RUNTIME_DIR || semanticRuntimeRoot;
+  const runtimeRoot =
+    process.env.JASPER_SEMANTIC_RUNTIME_DIR || semanticRuntimeRoot;
   if (!fs.existsSync(runtimeRoot)) {
     return null;
   }
@@ -167,8 +173,12 @@ function configuredMcpDisableArgs() {
   }
 
   const configText = fs.readFileSync(configPath, "utf8");
-  const matches = configText.matchAll(/^\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/gm);
-  const serverNames = [...new Set([...matches].map((match) => match[1]).filter(Boolean))];
+  const matches = configText.matchAll(
+    /^\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/gm,
+  );
+  const serverNames = [
+    ...new Set([...matches].map((match) => match[1]).filter(Boolean)),
+  ];
 
   return serverNames.flatMap((serverName) => [
     "-c",
@@ -245,7 +255,10 @@ function resolveRustToolchain() {
         PATH: prependPath([toolchainBinDir], process.env.PATH),
         RUSTC:
           process.env.JASPER_RUSTC_BIN ||
-          path.join(toolchainBinDir, process.platform === "win32" ? "rustc.exe" : "rustc"),
+          path.join(
+            toolchainBinDir,
+            process.platform === "win32" ? "rustc.exe" : "rustc",
+          ),
       },
     };
   }
@@ -408,6 +421,7 @@ Commands:
   setup       Prepare Jasper local runtime state
   doctor      Check Jasper setup, runtime, and auth health
   apps        Review connector and app requests Jasper is waiting on
+  audit       Run Jasper self-audits and evaluation baselines
   help        Print this message
 
 Options:
@@ -573,7 +587,8 @@ function resolveCodexCommand() {
     return packagedCodex;
   }
 
-  const preferCargo = isDevelopmentCheckout && process.env.JASPER_PREFER_LOCAL_BINARY !== "1";
+  const preferCargo =
+    isDevelopmentCheckout && process.env.JASPER_PREFER_LOCAL_BINARY !== "1";
   if (preferCargo) {
     const cargoPath = findCommandOnPath("cargo");
     if (cargoPath) {
@@ -637,17 +652,12 @@ let child;
 if (
   args.length === 0
     ? false
-    : subcommand === "--help" ||
-      subcommand === "-h" ||
-      subcommand === "help"
+    : subcommand === "--help" || subcommand === "-h" || subcommand === "help"
 ) {
   printTopLevelHelp();
   process.exit(0);
 } else if (
-  args.length === 0
-    ? false
-    : subcommand === "--version" ||
-      subcommand === "-V"
+  args.length === 0 ? false : subcommand === "--version" || subcommand === "-V"
 ) {
   process.stdout.write(`jasper ${jasperVersion()}\n`);
   process.exit(0);
@@ -704,6 +714,12 @@ if (
     process.execPath,
     [agentCliPath, "apps", ...args.slice(1)],
     jasperChildEnv(process.env),
+  );
+} else if (subcommand === "audit") {
+  child = spawnProcess(
+    process.execPath,
+    [agentCliPath, "audit", ...args.slice(1)],
+    jasperSetupEnv(process.env),
   );
 } else {
   const codex = resolveCodexCommand();

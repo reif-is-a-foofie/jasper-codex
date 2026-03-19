@@ -275,6 +275,23 @@ This region asks whether the system can stay safe, healthy, and improve itself.
 
 The brain-in-a-box score should be assigned only after running a real audit.
 
+## Automated Baseline Runner
+
+Jasper now ships an automated baseline runner for this rubric:
+
+```bash
+jasper audit brain-in-a-box
+```
+
+This command is intentionally a baseline, not a fake `99` machine.
+
+- it scores from live runtime evidence, memory, routing, tools, and trust surfaces
+- it enforces the automatic ceilings in this document
+- it reports what still requires manual or multi-session validation
+- it is an internal Jasper benchmark, so it should be paired with external public benchmark tracking rather than treated as the single source of truth
+
+It should be used as the fast, repeatable starting point before a human runs the full audit protocol below.
+
 ### Phase 1: Fresh Start
 
 - install or clone from scratch
