@@ -88,7 +88,8 @@ function printUsage() {
   node jasper-agent/src/cli.js workflows run WORKFLOW_ID [--stage NAME] [--auto-approve] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js dashboard [--stage STAGE] [--lookback-hours N] [--event-limit N] [--alert-limit N] [--history-limit N] [--dashboard-action-limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js browser open URL [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
-  node jasper-agent/src/cli.js browser run [--plan-file PATH | --plan-json JSON] [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
+  node jasper-agent/src/cli.js browser inspect [URL] [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--debug-port N] [--target-id TARGET_ID]
+  node jasper-agent/src/cli.js browser run [--plan-file PATH | --plan-json JSON] [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH] [--debug-port N] [--target-id TARGET_ID]
   node jasper-agent/src/cli.js action plan create [--action-title TEXT] [--action-steps TEXT] [--action-description TEXT] [--action-context TEXT] [--action-context-file PATH] [--requires-approval] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js action plan list [--limit N] [--jasper-home PATH] [--memory-root PATH]
   node jasper-agent/src/cli.js action plan status PLAN_ID [--jasper-home PATH] [--memory-root PATH]
@@ -373,6 +374,16 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--debug-port") {
+      options.debugPort = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--target-id") {
+      options.targetId = args[index + 1];
+      index += 1;
+      continue;
+    }
     options.positionals.push(arg);
   }
 
@@ -451,6 +462,12 @@ function applyBrowserOverrides(plan, options = {}) {
   }
   if (options.downloadDir) {
     merged.downloadDir = options.downloadDir;
+  }
+  if (options.debugPort) {
+    merged.debugPort = options.debugPort;
+  }
+  if (options.targetId) {
+    merged.targetId = options.targetId;
   }
 
   return merged;
@@ -1329,8 +1346,9 @@ async function main() {
     if (!browserCommand || browserCommand === "help") {
       process.stdout.write(`Browser commands:
   node jasper-agent/src/cli.js browser open URL [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
-  node jasper-agent/src/cli.js browser run --plan-file PATH [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
-  node jasper-agent/src/cli.js browser run --plan-json JSON [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH]
+  node jasper-agent/src/cli.js browser inspect [URL] [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--debug-port N] [--target-id TARGET_ID]
+  node jasper-agent/src/cli.js browser run --plan-file PATH [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH] [--debug-port N] [--target-id TARGET_ID]
+  node jasper-agent/src/cli.js browser run --plan-json JSON [--browser NAME] [--headless] [--keep-open] [--timeout-ms N] [--download-dir PATH] [--debug-port N] [--target-id TARGET_ID]
 `);
       return;
     }
@@ -1372,7 +1390,26 @@ async function main() {
       return;
     }
 
-    throw new Error("Browser command requires 'open' or 'run'");
+    if (browserCommand === "inspect") {
+      const url = browserOptions.positionals[0] || null;
+      printJson(
+        await automation.inspect(
+          applyBrowserOverrides(
+            {
+              browser: browserOptions.browser || "chrome",
+              headless: Boolean(browserOptions.headless),
+              closeOnExit: browserOptions.keepOpen ? false : undefined,
+              timeoutMs: browserOptions.timeoutMs,
+              url,
+            },
+            browserOptions,
+          ),
+        ),
+      );
+      return;
+    }
+
+    throw new Error("Browser command requires 'open', 'inspect', or 'run'");
   }
 
   if (command === "action") {

@@ -37,17 +37,20 @@ Any fork patches should stay limited to computer-use seams Jasper cannot yet own
 
 ## Task checklist
 
-- **Browser execution.** Run `jasper browser run --plan-file browser-plan.json` to execute a real Chrome-backed browser plan that can open pages, wait for selectors, fill fields, click buttons, and capture snapshots.
+- **Browser execution.** Run `jasper browser run --plan-file browser-plan.json` to execute a real Chrome-backed browser plan that can open pages, wait for selectors, fill fields, click buttons, capture snapshots, and finish with explicit local file moves.
 - **Action plans.** Use `jasper action plan create --action-title "Download statement" --action-context-file browser-plan.json --requires-approval` to log the desired browser task and record it in `memory` under `computer-use.plan`.
 - **Approval-aware execution.** Run `jasper action plan list` and `jasper action plan status PLAN_ID` to review the steps, then `jasper action plan approve PLAN_ID` before running `jasper action plan run PLAN_ID` so the automation stops at approval boundaries until authorized.
 - **Session replay and audit trail.** Inspect `jasper memory recent --type computer-use.execution` and `jasper memory recent --type computer-use.step` to see the recorded actions, and confirm that every execution entry references the plan ID, stage, and step statuses.
-- **Operator takeover.** Use `jasper action plan pending` to surface action plans still waiting for approval, so the operator can steer or cancel them manually.
+- **Operator takeover.** Run `jasper browser run --plan-file browser-plan.json --keep-open` to leave the browser session live, then use `jasper browser inspect --debug-port DEBUG_PORT` or a follow-up `jasper browser run --debug-port DEBUG_PORT --plan-file followup.json` so the operator and Jasper can keep working inside the same session.
+- **Recovery flows.** When a selector or click target drifts, confirm the failed action returns recovery hints listing the current page headings, buttons, and fields so Jasper can self-correct against what is actually on the page.
 - **Dashboard visibility.** Run `jasper` (dashboard) and confirm the cockpit lists the digest, connectors, guard alerts, workflows, strategic summary, and new “Action plans” section summarizing the most recent computer-use requests.
 
 ## Verification
 
 ```bash
 jasper browser run --plan-file browser-plan.json
+jasper browser run --plan-file browser-plan.json --keep-open
+jasper browser inspect --debug-port DEBUG_PORT
 jasper action plan list
 jasper action plan create --action-title "Download statement" --action-context-file browser-plan.json --requires-approval
 jasper action plan approve PLAN_ID

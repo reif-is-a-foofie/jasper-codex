@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -50,6 +53,12 @@ test("detects browser plan contexts and derives step text", () => {
 
 test("runs browser plans through the injected session adapter", async () => {
   const screenshots = [];
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "jasper-browser-test-"),
+  );
+  const downloadedFile = path.join(tempDir, "statement.pdf");
+  const archiveFile = path.join(tempDir, "archive", "statement.pdf");
+  fs.writeFileSync(downloadedFile, "statement");
   const automation = createBrowserAutomation({
     async launchSession(plan) {
       assert.equal(plan.browser, "chrome");
@@ -107,6 +116,7 @@ test("runs browser plans through the injected session adapter", async () => {
         async waitForDownload() {
           return {
             suggestedFilename: "statement.pdf",
+            path: downloadedFile,
             state: "completed",
           };
         },
@@ -142,6 +152,11 @@ test("runs browser plans through the injected session adapter", async () => {
         waitForDownload: true,
       },
       {
+        type: "move-file",
+        fromLastDownload: true,
+        to: archiveFile,
+      },
+      {
         type: "screenshot",
         path: "/tmp/jasper-browser-shot.png",
       },
@@ -153,11 +168,14 @@ test("runs browser plans through the injected session adapter", async () => {
   });
 
   assert.equal(result.status, "completed");
-  assert.equal(result.actions.length, 5);
+  assert.equal(result.actions.length, 6);
   assert.equal(
     result.actions[2].result.download.suggestedFilename,
     "statement.pdf",
   );
+  assert.equal(result.actions[3].result.to, archiveFile);
+  assert.equal(fs.existsSync(downloadedFile), false);
+  assert.equal(fs.existsSync(archiveFile), true);
   assert.equal(screenshots[0], "/tmp/jasper-browser-shot.png");
   assert.deepEqual(result.finalSnapshot, {
     url: "https://example.com/success",
@@ -171,6 +189,8 @@ test("reports browser action failures without hiding earlier progress", async ()
       return {
         browser: "chrome",
         closeOnExit: true,
+        debugPort: 9440,
+        targetId: "page-1",
         async navigate(url) {
           return {
             url,
@@ -212,4 +232,64 @@ test("reports browser action failures without hiding earlier progress", async ()
   assert.equal(result.actions[0].status, "completed");
   assert.equal(result.actions[1].status, "failed");
   assert.match(result.failure, /Could not click text:Join/);
+  assert.deepEqual(result.actions[1].recovery, {
+    url: "https://example.com",
+    title: "Start",
+    headings: [],
+    fields: [],
+    buttons: [],
+  });
+});
+
+test("inspects an attached browser session without running a full plan", async () => {
+  const automation = createBrowserAutomation({
+    async launchSession(options) {
+      assert.equal(options.debugPort, 9222);
+      assert.equal(options.targetId, "page-7");
+      return {
+        browser: "chrome",
+        closeOnExit: false,
+        debugPort: 9222,
+        targetId: "page-7",
+        userDataDir: "/tmp/jasper-existing-browser",
+        async navigate(url) {
+          return {
+            url,
+            title: "Inspection",
+          };
+        },
+        async snapshot() {
+          return {
+            url: "https://example.com/profile",
+            title: "Inspection",
+            headings: ["Profile"],
+            fields: [
+              {
+                label: "Email",
+                name: "email",
+                id: "email",
+                type: "email",
+                tag: "input",
+              },
+            ],
+            buttons: ["Save"],
+          };
+        },
+        async close() {
+          return true;
+        },
+      };
+    },
+  });
+
+  const inspection = await automation.inspect({
+    browser: "chrome",
+    debugPort: 9222,
+    targetId: "page-7",
+  });
+
+  assert.equal(inspection.debugPort, 9222);
+  assert.equal(inspection.targetId, "page-7");
+  assert.equal(inspection.snapshot.title, "Inspection");
+  assert.equal(inspection.snapshot.buttons[0], "Save");
 });

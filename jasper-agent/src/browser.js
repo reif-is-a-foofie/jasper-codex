@@ -9,6 +9,17 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_WAIT_MS = 1_000;
 const DEFAULT_POLL_MS = 150;
 
+function normalizeDebugPort(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    throw new Error(`Invalid debug port '${value}'.`);
+  }
+  return Math.floor(parsed);
+}
+
 function normalizeTimeout(value, fallback = DEFAULT_TIMEOUT_MS) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) {
@@ -142,6 +153,10 @@ export function describeBrowserAction(action = {}) {
     return "Evaluate browser script";
   }
 
+  if (type === "move-file") {
+    return `Move file to ${action.to || "destination"}`;
+  }
+
   return `Run browser action ${type || "unknown"}`;
 }
 
@@ -195,8 +210,31 @@ function normalizeBrowserPlan(plan = {}) {
     downloadDir: normalized.downloadDir || null,
     browserPath: normalized.browserPath || null,
     userDataDir: normalized.userDataDir || null,
+    debugPort: normalizeDebugPort(normalized.debugPort),
+    targetId: normalized.targetId || null,
     outputDir: normalized.outputDir || null,
     actions,
+  };
+}
+
+function normalizeBrowserSessionOptions(input = {}) {
+  const normalized = ensureObject(input, "Browser options");
+  return {
+    browser: normalizeBrowser(normalized.browser),
+    headless: Boolean(normalized.headless),
+    closeOnExit:
+      typeof normalized.closeOnExit === "boolean"
+        ? normalized.closeOnExit
+        : normalized.headless
+          ? true
+          : false,
+    timeoutMs: normalizeTimeout(normalized.timeoutMs, DEFAULT_TIMEOUT_MS),
+    downloadDir: normalized.downloadDir || null,
+    browserPath: normalized.browserPath || null,
+    userDataDir: normalized.userDataDir || null,
+    debugPort: normalizeDebugPort(normalized.debugPort),
+    targetId: normalized.targetId || null,
+    outputDir: normalized.outputDir || null,
   };
 }
 
@@ -526,42 +564,68 @@ function formatRuntimeError(result, label) {
   return `${label} failed.`;
 }
 
+async function selectPageTarget(baseUrl, options = {}) {
+  const targets = await fetchJson(`${baseUrl}/json/list`);
+  const pages = Array.isArray(targets)
+    ? targets.filter((target) => target?.type === "page")
+    : [];
+
+  if (options.targetId) {
+    return pages.find((target) => target.id === options.targetId) || null;
+  }
+
+  const nonBlank = pages.find(
+    (target) => !String(target.url || "").startsWith("about:blank"),
+  );
+  return nonBlank || pages[0] || null;
+}
+
 async function launchChromeCdpSession(options = {}) {
-  const browser = normalizeBrowser(options.browser);
-  const timeoutMs = normalizeTimeout(options.timeoutMs, DEFAULT_TIMEOUT_MS);
-  const debugPort = await getOpenPort();
-  const chromePath = resolveChromeExecutable(options.browserPath);
-  const userDataDir =
-    options.userDataDir ||
-    fs.mkdtempSync(path.join(os.tmpdir(), "jasper-browser-profile-"));
-  const ownsUserDataDir = !options.userDataDir;
-  const downloadDir = options.downloadDir
-    ? path.resolve(options.downloadDir)
+  const browserOptions = normalizeBrowserSessionOptions(options);
+  const browser = browserOptions.browser;
+  const timeoutMs = browserOptions.timeoutMs;
+  const debugPort = browserOptions.debugPort || (await getOpenPort());
+  const downloadDir = browserOptions.downloadDir
+    ? path.resolve(browserOptions.downloadDir)
     : null;
+  const attachingToExistingBrowser = Boolean(browserOptions.debugPort);
+  let child = null;
+  let userDataDir = browserOptions.userDataDir || null;
+  let ownsUserDataDir = false;
   if (downloadDir) {
     fs.mkdirSync(downloadDir, {
       recursive: true,
     });
   }
 
-  const chromeArgs = [
-    `--remote-debugging-port=${debugPort}`,
-    `--user-data-dir=${userDataDir}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-background-networking",
-    "--disable-default-apps",
-    "--disable-popup-blocking",
-    "about:blank",
-  ];
+  if (!attachingToExistingBrowser) {
+    const chromePath = resolveChromeExecutable(browserOptions.browserPath);
+    userDataDir =
+      browserOptions.userDataDir ||
+      fs.mkdtempSync(path.join(os.tmpdir(), "jasper-browser-profile-"));
+    ownsUserDataDir = !browserOptions.userDataDir;
 
-  if (options.headless) {
-    chromeArgs.unshift("--headless=new");
+    const chromeArgs = [
+      `--remote-debugging-port=${debugPort}`,
+      `--user-data-dir=${userDataDir}`,
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--disable-default-apps",
+      "--disable-popup-blocking",
+      "about:blank",
+    ];
+
+    if (browserOptions.headless) {
+      chromeArgs.unshift("--headless=new");
+    }
+
+    child = spawn(chromePath, chromeArgs, {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
   }
-
-  const child = spawn(chromePath, chromeArgs, {
-    stdio: "ignore",
-  });
 
   const baseUrl = `http://127.0.0.1:${debugPort}`;
   const version = await waitForBrowserVersion(baseUrl, timeoutMs);
@@ -577,9 +641,18 @@ async function launchChromeCdpSession(options = {}) {
     });
   }
 
-  const target = await fetchJson(`${baseUrl}/json/new?about:blank`, {
-    method: "PUT",
-  });
+  let target = attachingToExistingBrowser
+    ? await selectPageTarget(baseUrl, {
+        targetId: browserOptions.targetId,
+      })
+    : null;
+
+  if (!target) {
+    target = await fetchJson(`${baseUrl}/json/new?about:blank`, {
+      method: "PUT",
+    });
+  }
+
   const pageClient = await new CdpClient(target.webSocketDebuggerUrl).connect(
     timeoutMs,
   );
@@ -869,6 +942,10 @@ async function launchChromeCdpSession(options = {}) {
       guid: started.guid,
       url: started.url,
       suggestedFilename: started.suggestedFilename || null,
+      path:
+        downloadDir && started.suggestedFilename
+          ? path.join(downloadDir, started.suggestedFilename)
+          : null,
       state: progress.state,
       totalBytes: progress.totalBytes ?? null,
     };
@@ -908,12 +985,13 @@ async function launchChromeCdpSession(options = {}) {
     browser,
     debugPort,
     downloadDir,
-    headless: Boolean(options.headless),
+    headless: Boolean(browserOptions.headless),
     userDataDir,
+    targetId: target.id || browserOptions.targetId || null,
     closeOnExit:
-      typeof options.closeOnExit === "boolean"
-        ? options.closeOnExit
-        : options.headless
+      typeof browserOptions.closeOnExit === "boolean"
+        ? browserOptions.closeOnExit
+        : browserOptions.headless
           ? true
           : false,
     navigate,
@@ -940,7 +1018,29 @@ function resolveScreenshotPath(action, plan, index) {
   return path.resolve(outputDir, `browser-action-${index + 1}.png`);
 }
 
-async function executeBrowserAction(session, action, plan, index) {
+function buildRecoveryHints(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+
+  return {
+    url: snapshot.url || null,
+    title: snapshot.title || null,
+    headings: Array.isArray(snapshot.headings) ? snapshot.headings : [],
+    fields: Array.isArray(snapshot.fields)
+      ? snapshot.fields.map((field) => ({
+          label: field.label || null,
+          name: field.name || null,
+          id: field.id || null,
+          type: field.type || null,
+          tag: field.tag || null,
+        }))
+      : [],
+    buttons: Array.isArray(snapshot.buttons) ? snapshot.buttons : [],
+  };
+}
+
+async function executeBrowserAction(session, action, plan, index, state = {}) {
   if (action.type === "open" || action.type === "navigate") {
     return {
       snapshot: await session.navigate(action.url, action),
@@ -985,9 +1085,14 @@ async function executeBrowserAction(session, action, plan, index) {
       await session.waitForSelector(action.waitForSelector, action);
     }
 
+    const download = downloadPromise ? await downloadPromise : null;
+    if (download) {
+      state.lastDownload = download;
+    }
+
     return {
       ...clickResult,
-      download: downloadPromise ? await downloadPromise : null,
+      download,
     };
   }
 
@@ -1018,6 +1123,31 @@ async function executeBrowserAction(session, action, plan, index) {
     };
   }
 
+  if (action.type === "move-file") {
+    const fromPath =
+      action.from ||
+      (action.fromLastDownload ? state.lastDownload?.path || null : null);
+    if (!fromPath) {
+      throw new Error(
+        "Could not move file: missing source path or last download.",
+      );
+    }
+    if (!action.to) {
+      throw new Error("Could not move file: missing destination path.");
+    }
+
+    const resolvedFrom = path.resolve(fromPath);
+    const resolvedTo = path.resolve(action.to);
+    fs.mkdirSync(path.dirname(resolvedTo), {
+      recursive: true,
+    });
+    fs.renameSync(resolvedFrom, resolvedTo);
+    return {
+      from: resolvedFrom,
+      to: resolvedTo,
+    };
+  }
+
   throw new Error(`Unsupported browser action type: ${action.type}`);
 }
 
@@ -1029,6 +1159,7 @@ export function createBrowserAutomation(options = {}) {
       const plan = normalizeBrowserPlan(planInput);
       const session = await launchSession(plan);
       const actionResults = [];
+      const actionState = {};
       let finalSnapshot = null;
       let status = "completed";
       let failure = null;
@@ -1041,6 +1172,7 @@ export function createBrowserAutomation(options = {}) {
               action,
               plan,
               index,
+              actionState,
             );
             actionResults.push({
               index,
@@ -1052,12 +1184,19 @@ export function createBrowserAutomation(options = {}) {
           } catch (error) {
             status = "failed";
             failure = error instanceof Error ? error.message : String(error);
+            let recoverySnapshot = null;
+            try {
+              recoverySnapshot = await session.snapshot();
+            } catch {
+              recoverySnapshot = null;
+            }
             actionResults.push({
               index,
               type: action.type,
               description: describeBrowserAction(action),
               status: "failed",
               error: failure,
+              recovery: buildRecoveryHints(recoverySnapshot),
             });
             break;
           }
@@ -1085,6 +1224,35 @@ export function createBrowserAutomation(options = {}) {
       } finally {
         await session.close({
           closeBrowser: session.closeOnExit ?? plan.closeOnExit,
+        });
+      }
+    },
+
+    async inspect(inspectInput = {}) {
+      const sessionOptions = normalizeBrowserSessionOptions(inspectInput);
+      const session = await launchSession(sessionOptions);
+
+      try {
+        let openedUrl = null;
+        if (inspectInput.url) {
+          await session.navigate(inspectInput.url, inspectInput);
+          openedUrl = inspectInput.url;
+        }
+
+        return {
+          kind: "browser",
+          browser: session.browser || sessionOptions.browser,
+          headless: Boolean(sessionOptions.headless),
+          debugPort: session.debugPort || null,
+          userDataDir: session.userDataDir || null,
+          targetId: session.targetId || sessionOptions.targetId || null,
+          closeOnExit: session.closeOnExit ?? sessionOptions.closeOnExit,
+          openedUrl,
+          snapshot: await session.snapshot(),
+        };
+      } finally {
+        await session.close({
+          closeBrowser: session.closeOnExit ?? sessionOptions.closeOnExit,
         });
       }
     },
