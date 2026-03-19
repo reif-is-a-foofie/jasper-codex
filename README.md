@@ -70,6 +70,7 @@ jasper
 - `jasper doctor` reports whether Jasper has a usable runtime, OpenAI/Codex auth, and a healthy local semantic-store configuration.
 - `jasper audit brain-in-a-box` runs Jasper's automated baseline brain-in-a-box audit and prints the current score, ceilings, evidence, and next steps.
 - `jasper audit benchmark-index` computes Jasper's weighted external benchmark index across public suites; `jasper audit benchmark-index scaffold` prints an import template and `jasper audit benchmark-index import FILE` records benchmark results.
+- `python3 scripts/run_terminal_bench_with_jasper.py --task-id hello-world` bootstraps Terminal-Bench locally, runs Jasper against a real verifier-backed task, and can optionally import the result into the external benchmark index.
 - `jasper apps` reports connector and app requests Jasper is currently blocked on, and `jasper apps approve CONNECTOR_ID`, `jasper apps activate CONNECTOR_ID`, `jasper apps deactivate CONNECTOR_ID`, and `jasper apps revoke CONNECTOR_ID` now model consent and runtime readiness separately.
 - Connector activation now also records Jasper's preferred provider lane, so later broker decisions can resolve to concrete paths like `jasper/calendar` instead of a generic connector placeholder.
 - Jasper now ships a first read-only calendar tool, `calendar-read`, which is exposed through the activated `jasper/calendar` provider lane.

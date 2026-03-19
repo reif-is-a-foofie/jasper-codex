@@ -68,6 +68,13 @@ Import new results from JSON:
 jasper audit benchmark-index import results.json
 ```
 
+Run Jasper against a real Terminal-Bench task and optionally import the resulting score:
+
+```bash
+python3 scripts/run_terminal_bench_with_jasper.py --task-id hello-world
+python3 scripts/run_terminal_bench_with_jasper.py --task-id hello-world --import-benchmark-index
+```
+
 Optionally override weights from a JSON file:
 
 ```bash
